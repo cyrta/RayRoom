@@ -13,15 +13,17 @@ class AudioRenderer:
         self.room = room
         self.fs = fs
         self.source_audios = {} # Map source_obj -> audio_array
+        self.source_gains = {} # Map source_obj -> linear gain
         self._tracer = RayTracer(room)
         
-    def set_source_audio(self, source, audio_data):
+    def set_source_audio(self, source, audio_data, gain=1.0):
         """
         Assign audio data to a Source object.
         
         Args:
             source: The Source object.
             audio_data: numpy array or path to wav file.
+            gain: Linear gain factor for this source's audio (default 1.0).
         """
         if isinstance(audio_data, str):
             # Load from file
@@ -29,6 +31,8 @@ class AudioRenderer:
             self.source_audios[source] = data
         else:
             self.source_audios[source] = np.array(audio_data)
+        
+        self.source_gains[source] = gain
             
     def _load_wav(self, path):
         if not os.path.exists(path):
@@ -93,18 +97,19 @@ class AudioRenderer:
             
             # 3. For each receiver, generate RIR and Convolve
             source_audio = self.source_audios[source]
+            # Apply gain
+            gain = self.source_gains.get(source, 1.0)
             
             for rx in self.room.receivers:
                 # Generate RIR
                 rir = generate_rir(rx.energy_histogram, fs=self.fs, duration=rir_duration)
                 
                 # Convolve
-                if np.max(np.abs(source_audio)) > 0:
-                    # Normalize source before processing? Maybe optional.
-                    # Let's keep original level relative to others.
-                    pass
-                    
-                processed = fftconvolve(source_audio, rir, mode='full')
+                # Apply source gain to audio before convolution
+                # Note: source_audio is shared, so we multiply on the fly or copy.
+                # FFT convolve is linear: conv(gain*audio, rir) = gain*conv(audio, rir)
+                
+                processed = fftconvolve(source_audio * gain, rir, mode='full')
                 
                 # Mix into receiver output
                 if receiver_outputs[rx.name] is None:

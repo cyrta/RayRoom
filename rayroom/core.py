@@ -30,14 +30,54 @@ class RayTracer:
         
         directions = np.stack((x, y, z), axis=1)
         
-        initial_energy = source.power / n_rays 
+        # Base energy per ray (uniform distribution)
+        base_energy = source.power / n_rays 
         # Assuming scalar power for now. If array, handle accordingly.
+        
+        # Directivity Factors
+        # Calculate angle between ray_dir and source.orientation
+        if hasattr(source, 'directivity') and source.directivity != "omnidirectional":
+             # Dot product: cos(theta) = (a . b) / (|a||b|)
+             # Directions and orientation are normalized
+             cos_theta = np.dot(directions, source.orientation)
+             
+             if source.directivity == "cardioid":
+                 # 0.5 * (1 + cos(theta))
+                 gain = 0.5 * (1.0 + cos_theta)
+             elif source.directivity == "subcardioid":
+                 # 0.7 + 0.3 * cos(theta)
+                 gain = 0.7 + 0.3 * cos_theta
+             elif source.directivity == "hypercardioid":
+                 # 0.25 + 0.75 * cos(theta) -> take abs for back lobe? or just pattern
+                 # Standard polar pattern: |A + B cos(theta)|
+                 # Hypercardioid usually A=0.25, B=0.75
+                 gain = np.abs(0.25 + 0.75 * cos_theta)
+             elif source.directivity == "bidirectional":
+                 # |cos(theta)|
+                 gain = np.abs(cos_theta)
+             else:
+                 gain = np.ones(n_rays)
+                 
+             # Normalize gain so total energy is conserved relative to uniform source?
+             # Ideally sum(gain * base_energy) = source.power
+             # If we want to represent focusing power:
+             # current sum = sum(gain) * base_energy
+             # scaling_factor = n_rays / sum(gain)
+             # energy_per_ray = base_energy * gain * scaling_factor
+             
+             scaling_factor = n_rays / (np.sum(gain) + 1e-9)
+             initial_energies = base_energy * gain * scaling_factor
+        else:
+             initial_energies = np.full(n_rays, base_energy)
         
         for i in tqdm(range(n_rays)):
             ray_origin = source.position
             ray_dir = directions[i]
-            current_energy = initial_energy
+            current_energy = initial_energies[i]
             total_dist = 0.0
+            
+            if current_energy < energy_threshold:
+                continue
             
             for hop in range(max_hops):
                 if np.sum(current_energy) < energy_threshold:

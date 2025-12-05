@@ -171,6 +171,11 @@ def plot_room_2d(room, filename=None, show=True):
         ax.scatter(src.position[0], src.position[1], c='red', s=150, marker='^', label=f"{src.name}", zorder=10)
         ax.annotate(src.name, (src.position[0], src.position[1]), xytext=(5, 5), textcoords='offset points')
         
+        # Show orientation if directional
+        if hasattr(src, 'orientation') and hasattr(src, 'directivity') and src.directivity != "omnidirectional":
+             dx, dy = src.orientation[0], src.orientation[1]
+             ax.arrow(src.position[0], src.position[1], dx*0.5, dy*0.5, head_width=0.1, head_length=0.1, fc='red', ec='red', zorder=10)
+
     # Plot Receivers
     for rx in room.receivers:
         ax.scatter(rx.position[0], rx.position[1], c='green', s=150, marker='o', label=f"{rx.name}", zorder=10)

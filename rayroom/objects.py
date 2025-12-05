@@ -8,9 +8,19 @@ class Object3D:
         self.material = material if material else get_material("default")
 
 class Source(Object3D):
-    def __init__(self, name, position, power=1.0):
+    def __init__(self, name, position, power=1.0, orientation=None, directivity="omnidirectional"):
+        """
+        Source with optional directivity.
+        orientation: vector [x,y,z] pointing forward.
+        directivity: "omnidirectional", "cardioid", "hypercardioid", "bidirectional", or custom function(angle).
+        """
         super().__init__(name, position)
         self.power = power # Scalar or array for bands
+        self.orientation = np.array(orientation if orientation else [1, 0, 0], dtype=float)
+        norm = np.linalg.norm(self.orientation)
+        if norm > 0:
+            self.orientation /= norm
+        self.directivity = directivity
 
 class Receiver(Object3D):
     def __init__(self, name, position, radius=0.1):

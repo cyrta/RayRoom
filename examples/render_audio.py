@@ -32,8 +32,11 @@ def main():
     room.add_furniture(table)
     
     # 4. Define Sources
-    src1 = Source("Speaker 1", [1, 1, 1.5], power=1.0)
-    src2 = Source("Speaker 2", [5, 4, 1.5], power=1.0)
+    # Speaker 1 points towards the center/receiver (Cardioid)
+    src1 = Source("Speaker 1", [1, 1, 1.5], power=1.0, orientation=[1, 0.5, 0], directivity="cardioid")
+    # Speaker 2 points towards center (Cardioid)
+    src2 = Source("Speaker 2", [5, 4, 1.5], power=1.0, orientation=[-1, -0.5, 0], directivity="cardioid")
+    # AC is omnidirectional (default)
     src_ac = Source("AC", [3, 0.5, 2.8], power=0.5)
     
     room.add_source(src1)
@@ -53,9 +56,10 @@ def main():
     # Assign Audio Files
     print("Assigning audio files...")
     base_path = "examples/audios"
-    renderer.set_source_audio(src1, os.path.join(base_path, "speaker_1.wav"))
-    renderer.set_source_audio(src2, os.path.join(base_path, "speaker_2.wav"))
-    renderer.set_source_audio(src_ac, os.path.join(base_path, "foreground.wav"))
+    renderer.set_source_audio(src1, os.path.join(base_path, "speaker_1.wav"), gain=1.0)
+    renderer.set_source_audio(src2, os.path.join(base_path, "speaker_2.wav"), gain=1.0)
+    # Reduce AC volume to be background noise (gain=0.1)
+    renderer.set_source_audio(src_ac, os.path.join(base_path, "foreground.wav"), gain=0.1)
     
     # 6. Render
     print("Starting rendering pipeline...")
