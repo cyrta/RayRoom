@@ -34,6 +34,22 @@ jobs:
           cd docs
           sphinx-build -b html . _build/html
           
+      - name: Create Redirect to ReadTheDocs
+        run: |
+          echo '<!DOCTYPE html>
+          <html>
+            <head>
+              <meta http-equiv="refresh" content="0; url=https://rayroom.readthedocs.io/" />
+              <script type="text/javascript">
+                window.location.href = "https://rayroom.readthedocs.io/";
+              </script>
+              <title>Redirecting to ReadTheDocs</title>
+            </head>
+            <body>
+              If you are not redirected automatically, follow this <a href="https://rayroom.readthedocs.io/">link to the documentation</a>.
+            </body>
+          </html>' > docs/_build/html/index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
