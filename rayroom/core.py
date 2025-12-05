@@ -115,12 +115,11 @@ class RayTracer:
             initial_energies = np.full(n_rays, base_energy)
 
         collected_paths = []
-
         for i in tqdm(range(n_rays)):
             path = self._trace_single_ray(
                 source.position, directions[i], initial_energies[i], max_hops, energy_threshold, record_paths
             )
-            if path and record_paths:
+            if path:
                 collected_paths.append(path)
 
         return collected_paths if record_paths else None
@@ -129,7 +128,6 @@ class RayTracer:
         """
         Trace a single ray.
         """
-        # Current ray path data
         ray_path = []
         current_time = 0.0
         total_dist = 0.0
@@ -267,5 +265,4 @@ class RayTracer:
 
                 ray_origin = hit_point + hit_normal * 1e-3
 
-        return ray_path
-
+        return ray_path if record_paths and ray_path else None
