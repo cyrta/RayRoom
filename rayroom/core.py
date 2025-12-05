@@ -38,7 +38,7 @@ class RayTracer:
         # For simple energy ray tracing, we approximate broadband decay.
         self.air_absorption_db_m = air_absorption_coefficient(1000.0, temperature, humidity)
 
-    def run(self, n_rays=10000, max_hops=50, energy_threshold=1e-6, record_paths=False):
+    def run(self, n_rays=10000, max_hops=50, energy_threshold=1e-6, record_paths=False, min_ism_order=-1):
         """
         Run the acoustic simulation.
 
@@ -54,6 +54,9 @@ class RayTracer:
         :param record_paths: Whether to record and return the
         geometric paths of all rays (memory intensive). Defaults to False.
         :type record_paths: bool
+        :param min_ism_order: Max order of reflections handled by ISM. RayTracer will skip pure specular
+                              reflections up to this order. -1 to disable. Defaults to -1.
+        :type min_ism_order: int
         :return: Dictionary mapping source names to lists of ray paths if record_paths is True, else None.
         :rtype: dict or None
         """
@@ -61,13 +64,13 @@ class RayTracer:
 
         for source in self.room.sources:
             print(f"Simulating Source: {source.name}")
-            paths = self._trace_source(source, n_rays, max_hops, energy_threshold, record_paths)
+            paths = self._trace_source(source, n_rays, max_hops, energy_threshold, record_paths, min_ism_order)
             if record_paths:
                 all_paths[source.name] = paths
 
         return all_paths
 
-    def _trace_source(self, source, n_rays, max_hops, energy_threshold, record_paths=False):
+    def _trace_source(self, source, n_rays, max_hops, energy_threshold, record_paths=False, min_ism_order=-1):
         # Generate rays
         # Uniform sphere sampling
         phi = np.random.uniform(0, 2*np.pi, n_rays)
@@ -117,20 +120,21 @@ class RayTracer:
         collected_paths = []
         for i in tqdm(range(n_rays)):
             path = self._trace_single_ray(
-                source.position, directions[i], initial_energies[i], max_hops, energy_threshold, record_paths
+                source.position, directions[i], initial_energies[i], max_hops, energy_threshold, record_paths, min_ism_order
             )
             if path:
                 collected_paths.append(path)
 
         return collected_paths if record_paths else None
 
-    def _trace_single_ray(self, ray_origin, ray_dir, current_energy, max_hops, energy_threshold, record_paths):
+    def _trace_single_ray(self, ray_origin, ray_dir, current_energy, max_hops, energy_threshold, record_paths, min_ism_order=-1):
         """
         Trace a single ray.
         """
         ray_path = []
         current_time = 0.0
         total_dist = 0.0
+        is_pure_specular = True
 
         if current_energy < energy_threshold:
             return None
@@ -199,9 +203,19 @@ class RayTracer:
 
                     if t_rx is not None:
                         # Receiver hit!
-                        dist = total_dist + t_rx
-                        time = dist / C_SOUND
-                        receiver.record(time, current_energy)
+                        
+                        # Hybrid Check:
+                        # If this path is purely specular so far (including direct sound as hop=0),
+                        # and the reflection order (hop) is covered by ISM (<= min_ism_order),
+                        # then SKIP recording.
+                        should_record = True
+                        if is_pure_specular and hop <= min_ism_order:
+                            should_record = False
+                        
+                        if should_record:
+                            dist = total_dist + t_rx
+                            time = dist / C_SOUND
+                            receiver.record(time, current_energy)
 
             # 3. Handle Wall Hit
             if hit_obj is None:
@@ -259,6 +273,7 @@ class RayTracer:
                 if np.random.random() < scat_coeff:
                     # Diffuse
                     ray_dir = random_direction_hemisphere(hit_normal)
+                    is_pure_specular = False
                 else:
                     # Specular
                     ray_dir = reflect_vector(ray_dir, hit_normal)
