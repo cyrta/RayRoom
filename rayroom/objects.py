@@ -1,10 +1,12 @@
 import numpy as np
 from .materials import get_material
 
+
 class Object3D:
     """
     Base class for 3D objects in the simulation.
     """
+
     def __init__(self, name, position, material=None):
         """
         Initialize an Object3D.
@@ -20,10 +22,12 @@ class Object3D:
         self.position = np.array(position, dtype=float)
         self.material = material if material else get_material("default")
 
+
 class Source(Object3D):
     """
     Represents a sound source.
     """
+
     def __init__(self, name, position, power=1.0, orientation=None, directivity="omnidirectional"):
         """
         Initialize a Source.
@@ -41,17 +45,19 @@ class Source(Object3D):
         :type directivity: str
         """
         super().__init__(name, position)
-        self.power = power # Scalar or array for bands
+        self.power = power  # Scalar or array for bands
         self.orientation = np.array(orientation if orientation else [1, 0, 0], dtype=float)
         norm = np.linalg.norm(self.orientation)
         if norm > 0:
             self.orientation /= norm
         self.directivity = directivity
 
+
 class Receiver(Object3D):
     """
     Represents a microphone or listening point.
     """
+
     def __init__(self, name, position, radius=0.1):
         """
         Initialize a Receiver.
@@ -65,7 +71,7 @@ class Receiver(Object3D):
         """
         super().__init__(name, position)
         self.radius = radius
-        self.energy_histogram = [] # To store arriving energy packets (time, energy)
+        self.energy_histogram = []  # To store arriving energy packets (time, energy)
 
     def record(self, time, energy):
         """
@@ -78,10 +84,12 @@ class Receiver(Object3D):
         """
         self.energy_histogram.append((time, energy))
 
+
 class Furniture(Object3D):
     """
     Represents a complex 3D object (mesh) in the room, like a table or chair.
     """
+
     def __init__(self, name, vertices, faces, material=None):
         """
         Initialize Furniture.
@@ -95,19 +103,19 @@ class Furniture(Object3D):
         :param material: Material properties.
         :type material: rayroom.materials.Material, optional
         """
-        super().__init__(name, [0,0,0], material) # Position is relative or origin
+        super().__init__(name, [0, 0, 0], material)  # Position is relative or origin
         self.vertices = np.array(vertices)
-        self.faces = faces # List of lists of indices
-        
+        self.faces = faces  # List of lists of indices
+
         # Precompute normals and plane equations for faces
         self.face_normals = []
-        self.face_planes = [] # Point on plane
-        
+        self.face_planes = []  # Point on plane
+
         for face in self.faces:
             p0 = self.vertices[face[0]]
             p1 = self.vertices[face[1]]
             p2 = self.vertices[face[2]]
-            
+
             v1 = p1 - p0
             v2 = p2 - p0
             normal = np.cross(v1, v2)
@@ -117,10 +125,12 @@ class Furniture(Object3D):
             self.face_normals.append(normal)
             self.face_planes.append(p0)
 
+
 class Person(Furniture):
     """
     Represents a person, approximated as a rectangular box.
     """
+
     def __init__(self, name, position, height=1.7, width=0.5, depth=0.3, material_name="human"):
         """
         Initialize a Person object.
@@ -142,22 +152,21 @@ class Person(Furniture):
         # Usually position is feet location.
         x, y, z = position
         w, d, h = width, depth, height
-        
+
         # 8 corners
         verts = [
-            [x-w/2, y-d/2, z],   [x+w/2, y-d/2, z],   [x+w/2, y+d/2, z],   [x-w/2, y+d/2, z], # Bottom
+            [x-w/2, y-d/2, z],   [x+w/2, y-d/2, z],   [x+w/2, y+d/2, z],   [x-w/2, y+d/2, z],  # Bottom
             [x-w/2, y-d/2, z+h], [x+w/2, y-d/2, z+h], [x+w/2, y+d/2, z+h], [x-w/2, y+d/2, z+h]  # Top
         ]
-        
+
         # 6 faces (quads)
         faces = [
-            [0, 1, 2, 3], # Bottom
-            [4, 7, 6, 5], # Top
-            [0, 4, 5, 1], # Front
-            [1, 5, 6, 2], # Right
-            [2, 6, 7, 3], # Back
+            [0, 1, 2, 3],  # Bottom
+            [4, 7, 6, 5],  # Top
+            [0, 4, 5, 1],  # Front
+            [1, 5, 6, 2],  # Right
+            [2, 6, 7, 3],  # Back
             [3, 7, 4, 0]  # Left
         ]
-        
-        super().__init__(name, verts, faces, get_material(material_name))
 
+        super().__init__(name, verts, faces, get_material(material_name))

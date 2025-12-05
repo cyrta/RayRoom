@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def normalize(v):
     """
     Normalize a vector to unit length.
@@ -10,9 +11,10 @@ def normalize(v):
     :rtype: np.ndarray
     """
     norm = np.linalg.norm(v)
-    if norm == 0: 
-       return v
+    if norm == 0:
+        return v
     return v / norm
+
 
 def ray_plane_intersection(ray_origin, ray_dir, plane_point, plane_normal):
     """
@@ -33,12 +35,13 @@ def ray_plane_intersection(ray_origin, ray_dir, plane_point, plane_normal):
     denom = np.dot(ray_dir, plane_normal)
     if abs(denom) < 1e-6:
         return None
-    
+
     t = np.dot(plane_point - ray_origin, plane_normal) / denom
     if t < 0:
-        return None # Intersection behind ray
-        
+        return None  # Intersection behind ray
+
     return t
+
 
 def is_point_in_polygon(point, vertices, normal):
     """
@@ -70,7 +73,7 @@ def is_point_in_polygon(point, vertices, normal):
         # Drop z, use x, y
         proj_p = point[:2]
         proj_v = vertices[:, :2]
-        
+
     # Crossing number algorithm
     inside = False
     n = len(proj_v)
@@ -84,8 +87,9 @@ def is_point_in_polygon(point, vertices, normal):
                 if p1[0] == p2[0] or proj_p[0] <= xinters:
                     inside = not inside
         p1 = p2
-        
+
     return inside
+
 
 def reflect_vector(incident, normal):
     """
@@ -99,6 +103,7 @@ def reflect_vector(incident, normal):
     :rtype: np.ndarray
     """
     return incident - 2 * np.dot(incident, normal) * normal
+
 
 def random_direction_hemisphere(normal):
     """
@@ -115,20 +120,19 @@ def random_direction_hemisphere(normal):
         u = np.array([0.0, 1.0, 0.0])
     else:
         u = np.array([1.0, 0.0, 0.0])
-        
+
     u = normalize(np.cross(u, normal))
     v = np.cross(normal, u)
-    
+
     # Random samples
     phi = 2 * np.pi * np.random.random()
     r2 = np.random.random()
     r = np.sqrt(r2)
-    
+
     x = r * np.cos(phi)
     y = r * np.sin(phi)
     z = np.sqrt(1 - r2)
-    
+
     # Transform to world coordinates
     direction = x * u + y * v + z * normal
     return normalize(direction)
-

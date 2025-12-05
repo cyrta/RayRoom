@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 120
+exclude = venv,dist,docs,rayroom.egg-info
+per-file-ignores =
+    rayroom/__init__.py:F401
+

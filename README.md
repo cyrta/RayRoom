@@ -21,9 +21,9 @@ A Python-based ray tracing acoustics simulator supporting complex room geometrie
 ### Ray Tracing with Air Absorption
 The simulation engine employs stochastic ray tracing to model sound propagation. Energy decay is modeled through:
 1.  **Geometric Divergence**: Naturally handled by the divergence of rays from the source.
-2.  **Air Absorption**: An explicit attenuation factor is applied to each ray segment based on distance. The current implementation uses a simplified atmospheric absorption model (approximated at 1kHz) that accounts for **temperature** and **humidity**.
+2.  **Air Absorption**: An explicit attenuation factor is applied to each ray segment based on distance. The implementation uses the full **ISO 9613-1** standard model to calculate the absorption coefficient based on frequency, **temperature**, **humidity**, and **pressure**.
     *   Formula: $E_{new} = E_{old} \cdot 10^{-\alpha \cdot d / 10}$
-    *   Where $\alpha$ is the absorption coefficient derived from environmental conditions.
+    *   Where $\alpha$ is the absorption coefficient derived from environmental conditions using ISO 9613-1.
 
 ### Deterministic Phase & Interference
 The renderer converts the collected energy histogram into a Room Impulse Response (RIR) using one of two phase strategies:
@@ -50,7 +50,7 @@ Or install from source:
 ```bash
 git clone https://github.com/rayroom/rayroom.git
 cd rayroom
-pip install .
+pip install -e .
 ```
 
 ## Usage
