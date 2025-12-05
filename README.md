@@ -1,5 +1,3 @@
-# RayRoom: 3D Room Acoustics Simulator
-
 <p align="center">
   <img src="docs/_static/RayRoom.jpg" alt="RayRoom Logo" width="300">
 </p>
