@@ -53,5 +53,9 @@ def get_material(name):
         "air": Material("Air", absorption=0.0, transmission=1.0),  # Fully transparent
         "transparent_wall": Material("TransparentWall", absorption=0.1, transmission=0.8),
         "human": Material("Human", absorption=0.5, transmission=0.0, scattering=0.5),
+        "asphalt": Material("Asphalt", absorption=0.1, transmission=0.0, scattering=0.1),
+        "grass": Material("Grass", absorption=0.5, transmission=0.0, scattering=0.6),
+        "soil": Material("Soil", absorption=0.3, transmission=0.0, scattering=0.7),
+        "metal": Material("Metal", absorption=0.05, transmission=0.0, scattering=0.1),
     }
     return materials.get(name, Material("Default", 0.1, 0.0))

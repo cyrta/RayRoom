@@ -46,10 +46,10 @@ class AudioRenderer:
         if isinstance(audio_data, str):
             # Load from file
             data = self._load_wav(audio_data)
-            self.source_audios[source] = data
         else:
-            self.source_audios[source] = np.array(audio_data)
+            data = np.array(audio_data)
 
+        self.source_audios[source] = data
         self.source_gains[source] = gain
 
     def _load_wav(self, path):
@@ -99,7 +99,7 @@ class AudioRenderer:
         :type verbose: bool
         :param record_paths: Return ray paths for visualization. Defaults to False.
         :type record_paths: bool
-        :param interference: If True, enables deterministic phase for interference effects. Defaults to False.
+        :param interference: If True, enables deterministic phase for interference effects. Defaults to True.
         :type interference: bool
         :return: If record_paths is False, returns a dict {receiver_name: mixed_audio_array}.
                  If True, returns tuple (receiver_outputs, paths_data).

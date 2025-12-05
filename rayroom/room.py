@@ -80,7 +80,7 @@ class Room:
         """
         self.receivers.append(receiver)
 
-    def plot(self, filename=None, show=True, view='3d'):
+    def plot(self, filename=None, show=True, view='3d', interactive=False):
         """
         Plot the room geometry and objects.
 
@@ -90,9 +90,13 @@ class Room:
         :type show: bool
         :param view: Type of view, either '3d' or '2d'. Defaults to '3d'.
         :type view: str
+        :param interactive: If True, use Plotly for an interactive 3D plot (saves as HTML).
+        :type interactive: bool
         """
-        from .visualize import plot_room, plot_room_2d
-        if view == '2d':
+        from .visualize import plot_room, plot_room_2d, plot_room_3d_interactive
+        if interactive:
+            plot_room_3d_interactive(self, filename, show)
+        elif view == '2d':
             plot_room_2d(self, filename, show)
         else:
             plot_room(self, filename, show)
