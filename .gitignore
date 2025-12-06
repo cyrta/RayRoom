@@ -4,8 +4,12 @@ dist/
 build/
 *.egg-info/
 __pycache__/
+**/__pycache__/
 *.pyc
 venv/
+**/.DS_Store
+.DS_Store
+
 
 # Allow wav files from docs/_static
 !docs/_static/*.wav
