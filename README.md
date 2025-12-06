@@ -73,11 +73,11 @@ The audio samples illustrate how RayRoom captures richer late reverberation, dif
 
 | Engine | Rendering Method | Audio |
 |--------|------------------|-------|
-| **PyRoomAcoustics** (Baseline) | Ray Tracing | <video controls width="250"><source src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/pyroomacoustics.wav" type="audio/wav"></video> |
-| **RayRoom Hybrid** | ISM + Ray Tracing | <video controls width="250"><source src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/hybrid_simulation.wav" type="audio/wav"></video> |
-| **RayRoom Radiosity** | Diffuse Energy | <video controls width="250"><source src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/radiosity_simulation.wav" type="audio/wav"></video> |
-| **RayRoom Spectral** | Wave + Geometric | <video controls width="250"><source src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/spectral_simulation.wav" type="audio/wav"></video> |
-| **RayRoom Small Room** | Ray Tracing | <video controls width="250"><source src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/small_room_simulation.wav" type="audio/wav"></video> |
+| **PyRoomAcoustics** (Baseline) | Ray Tracing | <video controls width="300" src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/pyroomacoustics.mp4"></video> |
+| **RayRoom Hybrid** | ISM + Ray Tracing | <video controls width="300" src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/hybrid_simulation.mp4"></video> |
+| **RayRoom Radiosity** | Diffuse Energy | <video controls width="300" src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/radiosity_simulation.mp4"></video> |
+| **RayRoom Spectral** | Wave + Geometric | <video controls width="300" src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/spectral_simulation.mp4"></video> |
+| **RayRoom Small Room** | Ray Tracing | <video controls width="300" src="https://raw.githubusercontent.com/RayRoom/RayRoom/refs/heads/main/docs/_static/small_room_simulation.mp4"></video> |
 
 ## Usage
 
