@@ -46,7 +46,8 @@ def main():
 
     # Assign Audio Files
     print("Assigning audio files...")
-    base_path = "examples/audios"
+    base_path = "examples/audios-indextts"
+    # base_path = "examples/audios"
 
     if not os.path.exists(os.path.join(base_path, "speaker_1.wav")):
         print("Warning: Example audio files not found.")
