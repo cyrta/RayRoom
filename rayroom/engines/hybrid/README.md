@@ -8,6 +8,17 @@ The Hybrid Renderer in RayRoom combines two powerful techniques from geometric a
 
 The final RIR is created by cross-fading from the ISM output to the ray tracing output at a determined transition time or reflection order.
 
+### Block Diagram
+
+```mermaid
+graph TD
+    A[Input Source Audio] --> B{ISM};
+    A --> C{Ray Tracing};
+    B -- Early Reflections --> D{Cross-fading};
+    C -- Late Reverberation --> D;
+    D --> E[Final Broadband RIR];
+```
+
 ## Core Equations & Principles
 
 ### 1. Image Source Method (ISM)

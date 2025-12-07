@@ -4,6 +4,17 @@ Acoustic Radiosity is an energy-based simulation technique adapted from the fiel
 
 The core idea is to discretize all surfaces in the room (walls, furniture) into a finite number of smaller elements called "patches." The simulation then calculates how much acoustic energy is transferred from each patch to every other patch. This results in a much smoother and more perceptually natural reverberation tail compared to the stochastic noise that can be present in ray tracing.
 
+### Block Diagram
+
+```mermaid
+graph TD
+    A[Input: Room Geometry, Source/Receiver] --> B{Discretize Surfaces into Patches};
+    B --> C{Calculate View Factors Between Patches};
+    C --> D{Iteratively Propagate Energy};
+    D -- Energy at Receiver Patch --> E[Construct RIR];
+    E --> F[Final RIR];
+```
+
 ## Core Equations & Principles
 
 The fundamental equation of acoustic radiosity describes the "shooting" of sound energy from a patch $i$. The total energy $B_i$ leaving patch $i$ per unit area is the sum of its self-emitted energy $E_i$ (from direct sound sources) and the reflected energy it receives from all other patches $j$ in the scene:

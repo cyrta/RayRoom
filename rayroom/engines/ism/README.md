@@ -4,6 +4,17 @@ The Image Source Method (ISM) is a deterministic geometric acoustics technique u
 
 This method is particularly powerful for modeling the early part of a Room Impulse Response (RIR), which is perceptually dominated by strong, discrete echoes. The timing and direction of these early reflections are crucial for spatial perception. ISM is computationally exact for simple shoebox-shaped rooms but becomes more complex with irregular geometries and higher reflection orders.
 
+### Block Diagram
+
+```mermaid
+graph TD
+    A[Input: Room Geometry, Source/Receiver] --> B{Generate Image Sources};
+    B -- up to max_order --> C{Validate Reflection Paths};
+    C -- Valid Paths --> D{Compute Delay & Attenuation};
+    D --> E[Construct RIR];
+    E --> F[Final RIR];
+```
+
 ## Core Equations & Principles
 
 The fundamental principle of ISM is that a specular reflection path from a source $s$ to a receiver $r$ off a planar surface is equivalent to a straight-line path from a "virtual" or "image" source $s'$ to the receiver.

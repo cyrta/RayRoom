@@ -4,6 +4,19 @@ Acoustic Ray Tracing is a powerful simulation technique that models the propagat
 
 The core principle is to emit thousands of rays from a sound source in random directions. Each ray travels in a straight line until it intersects a surface. At each intersection, the ray's energy is attenuated based on the surface's acoustic properties, and a new direction is calculated for the reflected ray. The process is repeated until the ray's energy falls below a certain threshold or a maximum number of reflections is reached. The energy contributions of all rays that pass through a receiver volume are summed over time to construct the RIR.
 
+### Block Diagram
+
+```mermaid
+graph TD
+    A[Input: Room Geometry, Source/Receiver] --> B{Emit Rays from Source};
+    B -- Ray hits surface --> C{Calculate Reflection};
+    C -- Specular/Diffuse --> D{Attenuate Energy};
+    D -- Ray intersects receiver --> E{Record Energy & Time};
+    C --> B;
+    E --> F[Construct RIR];
+    F --> G[Final RIR];
+```
+
 ## Core Equations & Principles
 
 ### 1. Ray Energy Attenuation
