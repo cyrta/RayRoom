@@ -1,0 +1,33 @@
+#!/bin/bash
+
+echo "================================================"
+echo "Running Radiosity simulations..."
+echo "================================================"
+echo "> mono"
+../venv/bin/python3 demo_radiosity.py --mic mono --output_dir "outputs/radiosity/mono"
+echo "> ambisonic"
+../venv/bin/python3 demo_radiosity.py --mic ambisonic --output_dir "outputs/radiosity/ambisonic"
+
+echo "================================================"
+echo "Running Hybrid simulations..."
+echo "================================================"
+echo "> mono"
+../venv/bin/python3 demo_hybrid.py --mic mono --output_dir "outputs/hybrid/mono"
+echo "> ambisonic"
+../venv/bin/python3 demo_hybrid.py --mic ambisonic --output_dir "outputs/hybrid/ambisonic"
+
+echo "================================================"
+echo "Running Raytracing simulations..."
+echo "================================================"
+echo "> mono"
+../venv/bin/python3 demo_raytracing.py --mic mono --output_dir "outputs/raytracing/mono"
+echo "> ambisonic"
+../venv/bin/python3 demo_raytracing.py --mic ambisonic --output_dir "outputs/raytracing/ambisonic"
+
+echo "================================================"
+echo "Running Spectral simulations..."
+echo "================================================"
+echo "> mono"
+../venv/bin/python3 demo_spectral.py --mic mono --output_dir "outputs/spectral/mono"
+echo "> ambisonic"
+../venv/bin/python3 demo_spectral.py --mic ambisonic --output_dir "outputs/spectral/ambisonic"

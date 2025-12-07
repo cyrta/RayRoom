@@ -19,6 +19,7 @@ A Python-based ray tracing acoustics simulator supporting complex room geometrie
 - **Room Creation**: Create shoebox rooms or complex polygons from corner lists.
 - **Materials**: Frequency-dependent absorption, transmission (transparency), and scattering coefficients.
 - **Objects**: Support for furniture, people (blockers), sources, and receivers (microphones).
+- **Audio Formats**: Supports both mono and first-order Ambisonic (FOA) rendering.
 
 ## Physics & Rendering
 
@@ -74,31 +75,40 @@ To hear the differences between **RayRoom**'s rendering engines, including examp
 ### Simple Shoebox Room with Audio Rendering
 
 ```python
-from rayroom import Room, Source, Receiver, AudioRenderer
-import scipy.io.wavfile as wavfile
 import numpy as np
+from scipy.io import wavfile
+from rayroom import Room, Source, Receiver, RaytracingRenderer
 
-# Create Room
+# 1. Create a shoebox room
 room = Room.create_shoebox([5, 4, 3])
 
-# Add Source and Receiver
-source = Source("Speaker", [1, 1, 1.5])
+# 2. Add a sound source
+source = Source("TestSource", [2.5, 2, 1.5], power=1.0)
 room.add_source(source)
-room.add_receiver(Receiver("Mic", [4, 3, 1.5]))
 
-# Setup Audio Renderer
-renderer = AudioRenderer(room, fs=44100)
+# 3. Add a receiver (microphone)
+receiver = Receiver("TestMic", [1, 2, 1.5], radius=0.1)
+room.add_receiver(receiver)
 
-# Assign Audio to Source (requires an input wav file)
-renderer.set_source_audio(source, "input.wav")
+# 4. Set up the renderer
+renderer = RaytracingRenderer(room, fs=44100)
 
-# Run Simulation
-outputs = renderer.render(n_rays=10000)
+# 5. Assign audio to the source
+# Create a 1-second sine wave at 440 Hz
+fs = 44100
+duration = 1.0
+t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+audio_data = 0.5 * np.sin(2. * np.pi * 440. * t)
+renderer.set_source_audio(source, audio_data)
 
-# Save Result
-mixed_audio = outputs["Mic"]
-if mixed_audio is not None:
-    wavfile.write("output.wav", 44100, (mixed_audio * 32767).astype(np.int16))
+# 6. Run the simulation
+outputs = renderer.render(n_rays=10000, max_hops=30, rir_duration=1.5)
+
+# 7. Save the output
+output_audio = outputs[receiver.name]
+wavfile.write("output.wav", fs, (output_audio * 32767).astype(np.int16))
+
+print("Simulation complete. Audio saved to output.wav")
 ```
 
 ### Hybrid Rendering (ISM + Ray Tracing)
@@ -106,7 +116,7 @@ if mixed_audio is not None:
 Use the `HybridRenderer` to combine deterministic early reflections with stochastic late reverberation.
 
 ```python
-from rayroom.hybrid import HybridRenderer
+from rayroom import HybridRenderer
 
 # ... setup room ...
 
@@ -122,7 +132,7 @@ outputs = renderer.render(n_rays=20000, ism_order=2)
 Use the `SpectralRenderer` for high-fidelity simulation that accounts for wave physics at low frequencies.
 
 ```python
-from rayroom.spectral import SpectralRenderer
+from rayroom import SpectralRenderer
 
 # ... setup room ...
 
@@ -138,7 +148,7 @@ outputs = renderer.render(rir_duration=1.0)
 Use `RadiosityRenderer` for smooth diffuse tails without ray sampling noise.
 
 ```python
-from rayroom.render_radiosity import RadiosityRenderer
+from rayroom import RadiosityRenderer
 
 # ... setup room ...
 
@@ -154,20 +164,21 @@ See `examples/polygon_room.py` for creating rooms from 2D floor plans.
 
 ## Structure
 
-- `rayroom/core.py`: Main Ray Tracing engine.
 - `rayroom/room.py`: Room and wall definitions.
 - `rayroom/objects.py`: Source, Receiver, Furniture classes.
 - `rayroom/materials.py`: Material properties.
 - `rayroom/geometry.py`: Vector math and intersection tests.
-- `rayroom/audio.py`: Audio rendering and processing.
 - `rayroom/physics.py`: Acoustic physics models.
 - `rayroom/visualize.py`: Visualization tools.
-- `rayroom/ism.py`: Image Source Method engine.
-- `rayroom/radiosity.py`: Acoustic Radiosity solver.
-- `rayroom/render_radiosity.py`: Radiosity Renderer.
-- `rayroom/fdtd.py`: FDTD Wave solver.
-- `rayroom/hybrid.py`: Hybrid Geometric Renderer.
-- `rayroom/spectral.py`: Spectral Hybrid Renderer.
+- `rayroom/utils.py`: Utility functions.
+- `rayroom/engines/raytracer/core.py`: Main Ray Tracing engine.
+- `rayroom/engines/raytracer/audio.py`: Audio processing for ray tracer.
+- `rayroom/engines/ism/ism.py`: Image Source Method engine.
+- `rayroom/engines/radiosity/radiosity.py`: Acoustic Radiosity renderer.
+- `rayroom/engines/radiosity/core.py`: Acoustic Radiosity solver.
+- `rayroom/engines/hybrid/hybrid.py`: Hybrid Geometric Renderer (ISM + Ray Tracing).
+- `rayroom/engines/spectral/spectral.py`: Spectral Hybrid Renderer (Wave + Geometric).
+- `rayroom/engines/spectral/fdtd.py`: FDTD Wave solver.
 
 ## Contributing
 

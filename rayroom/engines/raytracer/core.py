@@ -1,14 +1,13 @@
 import numpy as np
 from tqdm import tqdm
-from .physics import air_absorption_coefficient
-from .geometry import (
+from ...physics import air_absorption_coefficient, C_SOUND
+from ...objects import Receiver, AmbisonicReceiver
+from ...geometry import (
     ray_plane_intersection,
     is_point_in_polygon,
     reflect_vector,
     random_direction_hemisphere
 )
-
-C_SOUND = 343.0  # m/s
 
 
 class RayTracer:
@@ -37,13 +36,15 @@ class RayTracer:
         # For simple energy ray tracing, we approximate broadband decay.
         self.air_absorption_db_m = air_absorption_coefficient(1000.0, temperature, humidity)
 
-    def run(self, n_rays=10000, max_hops=50, energy_threshold=1e-6, record_paths=False, min_ism_order=-1):
+    def run(self, source, n_rays=10000, max_hops=50, energy_threshold=1e-6, record_paths=False, min_ism_order=-1):
         """
-        Run the acoustic simulation.
+        Run the acoustic simulation for a single source.
 
-        Emits rays from all sources in the room and traces their paths until they are absorbed
+        Emits rays from the given source and traces their paths until they are absorbed
         or reach the maximum number of reflections.
 
+        :param source: The source to trace rays from.
+        :type source: rayroom.objects.Source
         :param n_rays: Number of rays to cast per source. Defaults to 10000.
         :type n_rays: int
         :param max_hops: Maximum number of reflections (hops) per ray. Defaults to 50.
@@ -59,15 +60,12 @@ class RayTracer:
         :return: Dictionary mapping source names to lists of ray paths if record_paths is True, else None.
         :rtype: dict or None
         """
-        all_paths = {} if record_paths else None
+        print(f"RayTracer starting for source: {source.name}")
+        paths = self._trace_source(source, n_rays, max_hops, energy_threshold, record_paths, min_ism_order)
 
-        for source in self.room.sources:
-            print(f"Simulating Source: {source.name}")
-            paths = self._trace_source(source, n_rays, max_hops, energy_threshold, record_paths, min_ism_order)
-            if record_paths:
-                all_paths[source.name] = paths
-
-        return all_paths
+        if record_paths:
+            return {source.name: paths}
+        return None
 
     def _trace_source(self, source, n_rays, max_hops, energy_threshold, record_paths=False, min_ism_order=-1):
         # Generate rays
@@ -119,14 +117,29 @@ class RayTracer:
         collected_paths = []
         for i in tqdm(range(n_rays)):
             path = self._trace_single_ray(
-                source.position, directions[i], initial_energies[i], max_hops, energy_threshold, record_paths, min_ism_order
+                source.position,
+                directions[i],
+                initial_energies[i],
+                max_hops,
+                energy_threshold,
+                record_paths,
+                min_ism_order
             )
             if path:
                 collected_paths.append(path)
 
         return collected_paths if record_paths else None
 
-    def _trace_single_ray(self, ray_origin, ray_dir, current_energy, max_hops, energy_threshold, record_paths, min_ism_order=-1):
+    def _trace_single_ray(
+        self,
+        ray_origin,
+        ray_dir,
+        current_energy,
+        max_hops,
+        energy_threshold,
+        record_paths,
+        min_ism_order=-1
+    ):
         """
         Trace a single ray.
         """
@@ -135,7 +148,9 @@ class RayTracer:
         total_dist = 0.0
         is_pure_specular = True
 
-        if current_energy < energy_threshold:
+        if current_energy < energy_threshold or not np.isfinite(current_energy):
+            if not np.isfinite(current_energy):
+                print(f"DEBUG: Invalid energy detected: {current_energy}. Stopping ray.")
             return None
 
         for hop in range(max_hops):
@@ -194,15 +209,15 @@ class RayTracer:
                     t2 = -b + sqrt_delta
 
                     # We want entry point
-                    t_rx = None
-                    if t1 > 1e-4 and t1 < dist_to_wall:
-                        t_rx = t1
-                    elif t2 > 1e-4 and t2 < dist_to_wall:
-                        t_rx = t2
+                    t_rx = float('inf')
+                    if t1 > 1e-4:
+                        t_rx = min(t_rx, t1)
+                    if t2 > 1e-4:
+                        t_rx = min(t_rx, t2)
 
-                    if t_rx is not None:
+                    if t_rx is not None and t_rx < dist_to_wall:
                         # Receiver hit!
-                        
+
                         # Hybrid Check:
                         # If this path is purely specular so far (including direct sound as hop=0),
                         # and the reflection order (hop) is covered by ISM (<= min_ism_order),
@@ -210,11 +225,14 @@ class RayTracer:
                         should_record = True
                         if is_pure_specular and hop <= min_ism_order:
                             should_record = False
-                        
+
                         if should_record:
                             dist = total_dist + t_rx
                             time = dist / C_SOUND
-                            receiver.record(time, current_energy)
+                            if isinstance(receiver, AmbisonicReceiver):
+                                receiver.record(time, current_energy, ray_dir)
+                            else:
+                                receiver.record(time, current_energy)
 
             # 3. Handle Wall Hit
             if hit_obj is None:

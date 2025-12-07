@@ -71,7 +71,7 @@ class Receiver(Object3D):
         """
         super().__init__(name, position)
         self.radius = radius
-        self.energy_histogram = []  # To store arriving energy packets (time, energy)
+        self.amplitude_histogram = []  # To store arriving energy packets (time, amplitude)
 
     def record(self, time, energy):
         """
@@ -82,7 +82,88 @@ class Receiver(Object3D):
         :param energy: Energy value of the arriving packet.
         :type energy: float or np.ndarray
         """
-        self.energy_histogram.append((time, energy))
+        # Convert energy to amplitude
+        if energy >= 0:
+            self.amplitude_histogram.append((time, np.sqrt(energy)))
+
+
+class AmbisonicReceiver(Object3D):
+    """
+    Represents a first-order Ambisonic microphone.
+    """
+
+    def __init__(self, name, position, orientation=None, radius=0.01):
+        """
+        Initialize an AmbisonicReceiver.
+
+        :param name: Name of the receiver.
+        :type name: str
+        :param position: [x, y, z] coordinates.
+        :type position: list or np.ndarray
+        :param orientation: [x, y, z] vector pointing in the forward direction (X-axis).
+        :type orientation: list or np.ndarray, optional
+        :param radius: Radius for ray intersection tests.
+        :type radius: float
+        """
+        super().__init__(name, position)
+        self.radius = radius
+
+        # Histograms for W, X, Y, Z channels
+        self.w_histogram = []
+        self.x_histogram = []
+        self.y_histogram = []
+        self.z_histogram = []
+
+        # Define the orientation of the microphone capsules
+        self.orientation = np.array(orientation if orientation is not None else [1, 0, 0], dtype=float)
+        norm = np.linalg.norm(self.orientation)
+        if norm > 0:
+            self.orientation /= norm
+
+        # Create an orthonormal basis for the microphone's local coordinate system
+        self.x_axis = self.orientation  # Forward
+
+        # Ensure the up vector is not parallel to the forward vector
+        up_global = np.array([0., 0., 1.])
+        if np.allclose(np.abs(np.dot(self.x_axis, up_global)), 1.0):
+            # If forward is aligned with global Z, use global Y as up
+            up_global = np.array([0., 1., 0.])
+
+        self.y_axis = np.cross(up_global, self.x_axis)  # Left
+        self.y_axis /= np.linalg.norm(self.y_axis)
+
+        self.z_axis = np.cross(self.x_axis, self.y_axis)  # Up
+        self.z_axis /= np.linalg.norm(self.z_axis)
+
+    def record(self, time, energy, direction):
+        """
+        Record an energy packet arrival from a specific direction.
+
+        :param time: Arrival time in seconds.
+        :type time: float
+        :param energy: Energy value of the arriving packet.
+        :type energy: float or np.ndarray
+        :param direction: Normalized vector indicating the direction of arrival.
+        :type direction: np.ndarray
+        """
+        if energy < 0:
+            return
+
+        amplitude = np.sqrt(energy)
+
+        # W channel (omnidirectional)
+        gain_w = 1.0
+        self.w_histogram.append((time, amplitude * gain_w))
+
+        # X, Y, Z channels (figure-of-eight / bidirectional)
+        # Gain is the projection of the arrival direction onto the capsule's axis
+        gain_x = np.dot(direction, self.x_axis)
+        gain_y = np.dot(direction, self.y_axis)
+        gain_z = np.dot(direction, self.z_axis)
+
+        self.x_histogram.append((time, amplitude * gain_x))
+        self.y_histogram.append((time, amplitude * gain_y))
+        self.z_histogram.append((time, amplitude * gain_z))
 
 
 class Furniture(Object3D):

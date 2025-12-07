@@ -1,8 +1,7 @@
 import numpy as np
 from tqdm import tqdm
-from .geometry import normalize
-
-C_SOUND = 343.0
+from ...geometry import normalize
+from ...physics import C_SOUND
 
 class RadiositySolver:
     """

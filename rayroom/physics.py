@@ -1,5 +1,7 @@
 import numpy as np
 
+C_SOUND = 343.0  # Speed of sound in air in m/s at 20°C
+
 
 def air_absorption_coefficient(freq, temperature=20.0, humidity=50.0, pressure=101325.0):
     """
