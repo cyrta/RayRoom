@@ -1,0 +1,1007 @@
+"""
+Source Directivity Module
+Frequency-dependent directional sound sources
+
+Implements realistic directivity patterns for:
+- Human voice (speech, singing)
+- Musical instruments
+- Loudspeakers (various types)
+- Custom measured patterns
+
+References:
+    - Chu & Warnock (2002) "Detailed directivity of sound fields around human talkers"
+    - Halkosaari et al. (2005) "Directivity of artificial and human speech"
+    - Polar plots from loudspeaker manufacturers
+"""
+
+import numpy as np
+from typing import Optional, Tuple, Dict, Callable, List
+from dataclasses import dataclass
+from scipy.interpolate import interp1d, RectBivariateSpline
+from scipy.special import sph_harm
+import json
+
+
+@dataclass
+class DirectivityData:
+    """
+    Directivity pattern data
+    
+    Attributes
+    ----------
+    frequencies : ndarray
+        Frequencies in Hz (1D array)
+    theta : ndarray
+        Elevation angles in radians [0, π] (optional for patterns)
+    phi : ndarray  
+        Azimuth angles in radians [0, 2π] (optional for patterns)
+    pattern : ndarray
+        Directivity gains:
+        - 1D: frequency-dependent DI only (assumes pattern type)
+        - 2D: (n_freq, n_angles) for rotationally symmetric
+        - 3D: (n_freq, n_theta, n_phi) for full spherical
+    pattern_type : str
+        'omnidirectional', 'cardioid', 'hypercardioid', 'bidirectional',
+        'spherical_harmonics', 'measured'
+    """
+    frequencies: np.ndarray
+    pattern: np.ndarray
+    pattern_type: str
+    theta: Optional[np.ndarray] = None
+    phi: Optional[np.ndarray] = None
+    directivity_index: Optional[np.ndarray] = None  # DI in dB vs freq
+
+
+class DirectionalSource:
+    """
+    Frequency-dependent directional sound source
+    
+    Supports multiple directivity representations:
+    1. Analytical patterns (cardioid, hypercardioid, etc.)
+    2. Measured balloon data (imported from files)
+    3. Spherical harmonics decomposition
+    4. Frequency-dependent patterns
+    
+    Parameters
+    ----------
+    position : ndarray (3,)
+        Source position in meters
+    orientation : ndarray (3,)
+        Direction vector (will be normalized)
+    directivity : DirectivityData or str
+        Directivity pattern data or preset name
+        
+    Examples
+    --------
+    >>> # Human voice preset
+    >>> source = DirectionalSource(
+    ...     position=[1, 2, 1.7],
+    ...     orientation=[1, 0, 0],  # Facing +x
+    ...     directivity='human_voice'
+    ... )
+    
+    >>> # Custom pattern
+    >>> data = DirectivityData(
+    ...     frequencies=[125, 250, 500, 1000, 2000, 4000],
+    ...     pattern=[[gains...]],  
+    ...     pattern_type='cardioid'
+    ... )
+    >>> source = DirectionalSource([1,2,1.7], [1,0,0], data)
+    """
+    
+    # Preset directivity patterns
+    PRESETS = {}  # Will be populated below
+    
+    def __init__(
+        self,
+        position: np.ndarray,
+        orientation: np.ndarray,
+        directivity: Optional[str or DirectivityData] = 'omnidirectional',
+    ):
+        self.position = np.array(position, dtype=float)
+        self.orientation = np.array(orientation, dtype=float)
+        self.orientation = self.orientation / (np.linalg.norm(self.orientation) + 1e-10)
+        
+        # Load directivity
+        if isinstance(directivity, str):
+            if directivity not in self.PRESETS:
+                raise ValueError(f"Unknown preset: {directivity}")
+            self.directivity = self.PRESETS[directivity]()
+        else:
+            self.directivity = directivity
+        
+        # Setup interpolators
+        self._setup_interpolation()
+    
+    def _setup_interpolation(self):
+        """Setup interpolation for efficient directivity queries"""
+        data = self.directivity
+        
+        # Frequency interpolator for DI
+        if data.directivity_index is not None:
+            self.di_interp = interp1d(
+                data.frequencies,
+                data.directivity_index,
+                kind='linear',
+                bounds_error=False,
+                fill_value=(data.directivity_index[0], data.directivity_index[-1])
+            )
+        else:
+            self.di_interp = None
+        
+        # Pattern interpolator (if full 3D data)
+        if data.pattern is not None and data.pattern.ndim == 3 and data.theta is not None:
+            # Full 3D spherical pattern
+            # Store for each frequency
+            self.pattern_interps = []
+            for i, freq in enumerate(data.frequencies):
+                interp = RectBivariateSpline(
+                    data.theta,
+                    data.phi,
+                    data.pattern[i],
+                    kx=1, ky=1  # Linear interpolation
+                )
+                self.pattern_interps.append(interp)
+        else:
+            self.pattern_interps = None
+    
+    def get_gain(
+        self,
+        direction: np.ndarray,
+        frequency: float,
+    ) -> float:
+        """
+        Compute directivity gain toward given direction
+        
+        Parameters
+        ----------
+        direction : ndarray (3,)
+            Direction vector (will be normalized)
+        frequency : float
+            Frequency in Hz
+            
+        Returns
+        -------
+        gain : float
+            Directivity gain [0, 1]
+            1.0 = on-axis, 0.0 = complete null
+        """
+        # Normalize direction
+        direction = np.array(direction, dtype=float)
+        direction = direction / (np.linalg.norm(direction) + 1e-10)
+        
+        # Compute angles relative to source orientation
+        theta, phi = self._direction_to_angles(direction)
+        
+        # Get pattern type
+        pattern_type = self.directivity.pattern_type
+        
+        if pattern_type == 'omnidirectional':
+            return 1.0
+        
+        elif pattern_type in ['cardioid', 'hypercardioid', 'bidirectional', 'subcardioid']:
+            return self._analytical_pattern(theta, frequency, pattern_type)
+        
+        elif pattern_type == 'measured' and self.pattern_interps is not None:
+            return self._interpolate_measured_pattern(theta, phi, frequency)
+        
+        elif pattern_type == 'spherical_harmonics':
+            return self._evaluate_spherical_harmonics(theta, phi, frequency)
+        
+        else:
+            # Default to analytical with DI
+            return self._analytical_pattern(theta, frequency, 'cardioid')
+    
+    def _direction_to_angles(self, direction: np.ndarray) -> Tuple[float, float]:
+        """
+        Convert direction vector to spherical angles relative to orientation
+        
+        Returns
+        -------
+        theta : float
+            Elevation angle from orientation [0, π]
+        phi : float
+            Azimuth angle [0, 2π]
+        """
+        # Rotation to align orientation with z-axis
+        # (Simplified - assumes orientation is primary axis)
+        
+        # Angle from orientation (theta)
+        cos_theta = np.dot(self.orientation, direction)
+        theta = np.arccos(np.clip(cos_theta, -1, 1))
+        
+        # Azimuth (phi) - project to plane perpendicular to orientation
+        # Simplified: assume rotation around z-axis for now
+        # Full implementation would use proper rotation matrices
+        
+        if np.abs(theta) < 1e-6:  # On-axis
+            phi = 0.0
+        else:
+            # Project to perpendicular plane
+            perp = direction - cos_theta * self.orientation
+            perp_norm = np.linalg.norm(perp)
+            
+            if perp_norm < 1e-6:
+                phi = 0.0
+            else:
+                perp = perp / perp_norm
+                # Use arbitrary reference direction for phi
+                # (Simplified - full implementation would use proper basis)
+                phi = np.arctan2(perp[1], perp[0])
+                if phi < 0:
+                    phi += 2 * np.pi
+        
+        return theta, phi
+    
+    def _analytical_pattern(
+        self,
+        theta: float,
+        frequency: float,
+        pattern_type: str,
+    ) -> float:
+        """
+        Evaluate analytical directivity pattern
+        
+        Parameters
+        ----------
+        theta : float
+            Angle from on-axis [0, π]
+        frequency : float
+            Frequency in Hz
+        pattern_type : str
+            Pattern type
+            
+        Returns
+        -------
+        gain : float
+            Directivity gain [0, 1]
+        """
+        # Get frequency-dependent directivity index
+        if self.di_interp is not None:
+            DI_db = self.di_interp(frequency)
+            DI_linear = 10**(DI_db / 10)
+        else:
+            DI_linear = 1.0
+        
+        # Base patterns
+        cos_theta = np.cos(theta)
+        
+        if pattern_type == 'cardioid':
+            # (1 + cos θ) / 2
+            pattern = (1 + cos_theta) / 2
+        
+        elif pattern_type == 'subcardioid':
+            # Between omni and cardioid
+            # 0.75 + 0.25 cos θ
+            pattern = 0.75 + 0.25 * cos_theta
+        
+        elif pattern_type == 'hypercardioid':
+            # 0.25 + 0.75 cos θ
+            pattern = 0.25 + 0.75 * cos_theta
+        
+        elif pattern_type == 'bidirectional':
+            # cos θ (figure-8)
+            pattern = np.abs(cos_theta)
+        
+        else:
+            pattern = 1.0
+        
+        # Apply frequency-dependent narrowing
+        # Higher DI = narrower pattern
+        if DI_linear > 1.0:
+            sharpness = np.sqrt(DI_linear)
+            pattern = pattern ** sharpness
+        
+        return float(np.clip(pattern, 0, 1))
+    
+    def _interpolate_measured_pattern(
+        self,
+        theta: float,
+        phi: float,
+        frequency: float,
+    ) -> float:
+        """Interpolate from measured 3D pattern data"""
+        if self.pattern_interps is None:
+            return 1.0
+        
+        # Find surrounding frequencies
+        freqs = self.directivity.frequencies
+        
+        if frequency <= freqs[0]:
+            interp = self.pattern_interps[0]
+            gain = interp(theta, phi, grid=False)[0]
+        elif frequency >= freqs[-1]:
+            interp = self.pattern_interps[-1]
+            gain = interp(theta, phi, grid=False)[0]
+        else:
+            # Linear interpolation between frequencies
+            idx = np.searchsorted(freqs, frequency)
+            f0, f1 = freqs[idx-1], freqs[idx]
+            alpha = (frequency - f0) / (f1 - f0)
+            
+            gain0 = self.pattern_interps[idx-1](theta, phi, grid=False)[0]
+            gain1 = self.pattern_interps[idx](theta, phi, grid=False)[0]
+            gain = (1 - alpha) * gain0 + alpha * gain1
+        
+        return float(np.clip(gain, 0, 1))
+    
+    def _evaluate_spherical_harmonics(
+        self,
+        theta: float,
+        phi: float,
+        frequency: float,
+    ) -> float:
+        """Evaluate spherical harmonics decomposition
+  
+        Spherical harmonics are **orthonormal basis functions** on the sphere, analogous to Fourier series on a circle.
+        ``` 
+        Y_n^m(θ, φ) = sqrt((2n+1)/(4π) × (n-m)!/(n+m)!) × P_n^m(cos θ) × e^(imφ)
+        Where:
+          n = order (0, 1, 2, ...) - controls angular resolution
+          m = degree (-n ≤ m ≤ n) - controls azimuthal variation
+          θ = elevation [0, π]
+          φ = azimuth [0, 2π]
+          P_n^m = Associated Legendre polynomial
+        ```
+        """ 
+        # implementation for SH decomposition
+        # Would require SH coefficients stored in directivity data
+        # use reference recordings using  SOFA Format (Spatially Oriented Format for Acoustics)
+        data = self.directivity
+        
+        # Check if SH data available
+        if data.sh_coefficients is None:
+            return 1.0  # Fallback
+        
+        # Find frequency index
+        freq_idx = np.argmin(np.abs(data.frequencies - frequency))
+        
+        # Get SH coefficients at this frequency
+        sh_coeffs = data.sh_coefficients[freq_idx]
+        
+        # Evaluate
+        gain = evaluate_spherical_harmonics(
+            sh_coeffs=sh_coeffs,
+            sh_order=data.sh_order,
+            theta=theta,
+            phi=phi,
+            normalization=data.sh_normalization
+        )
+        
+        return float(gain)
+    
+    def plot_pattern(
+        self,
+        frequency: float,
+        plane: str = 'horizontal',
+        ax=None,
+    ):
+        """
+        Plot directivity pattern at given frequency
+        
+        Parameters
+        ----------
+        frequency : float
+            Frequency in Hz
+        plane : str
+            'horizontal' (xy-plane) or 'vertical' (xz-plane)
+        ax : matplotlib axis
+            Axis to plot on (creates new if None)
+        """
+        import matplotlib.pyplot as plt
+        
+        if ax is None:
+            fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
+        
+        # Generate angles
+        angles = np.linspace(0, 2*np.pi, 360)
+        gains = []
+        
+        for angle in angles:
+            if plane == 'horizontal':
+                # xy-plane
+                direction = np.array([
+                    np.cos(angle),
+                    np.sin(angle),
+                    0
+                ])
+            else:
+                # xz-plane (vertical)
+                direction = np.array([
+                    np.cos(angle),
+                    0,
+                    np.sin(angle)
+                ])
+            
+            gain = self.get_gain(direction, frequency)
+            gains.append(gain)
+        
+        gains = np.array(gains)
+        
+        # Plot
+        ax.plot(angles, gains, linewidth=2)
+        ax.set_title(f'{plane.capitalize()} Pattern @ {frequency:.0f} Hz')
+        ax.set_ylim(0, 1)
+        ax.grid(True)
+        
+        return ax
+
+
+# ============================================================================
+# PRESET DEFINITIONS
+# ============================================================================
+
+def _create_omnidirectional() -> DirectivityData:
+    """Perfect omnidirectional source"""
+    return DirectivityData(
+        frequencies=np.array([63, 125, 250, 500, 1000, 2000, 4000, 8000]),
+        pattern=np.ones((8, 1)),
+        pattern_type='omnidirectional',
+        directivity_index=np.zeros(8),
+    )
+
+
+def _create_human_voice_speech() -> DirectivityData:
+    """
+    Human voice directivity (speech)
+    
+    Based on:
+    - Chu & Warnock (2002)
+    - Halkosaari et al. (2005)
+    
+    Characteristics:
+    - Nearly omnidirectional at low frequencies
+    - Increasingly directional at high frequencies
+    - Forward bias (mouth opening effect)
+    - DI increases from 0 dB to ~5 dB
+    """
+    frequencies = np.array([125, 250, 500, 1000, 2000, 4000, 8000])
+    
+    # Directivity Index (dB) - measured values
+    # Low freq: omni, high freq: directional
+    directivity_index = np.array([0.0, 0.5, 1.0, 2.0, 3.0, 4.5, 5.5])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,  # Use analytical
+        pattern_type='cardioid',
+        directivity_index=directivity_index,
+    )
+
+
+def _create_human_voice_singing() -> DirectivityData:
+    """
+    Human voice directivity (singing)
+    
+    Similar to speech but:
+    - Slightly more directional due to trained projection
+    - Higher DI at mid frequencies
+    """
+    frequencies = np.array([125, 250, 500, 1000, 2000, 4000, 8000])
+    directivity_index = np.array([0.0, 0.8, 1.5, 2.5, 3.5, 5.0, 6.0])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,
+        pattern_type='cardioid',
+        directivity_index=directivity_index,
+    )
+
+
+def _create_trumpet() -> DirectivityData:
+    """
+    Trumpet directivity
+    
+    Highly directional at high frequencies due to bell
+    """
+    frequencies = np.array([125, 250, 500, 1000, 2000, 4000, 8000])
+    directivity_index = np.array([1.0, 2.0, 3.5, 5.0, 7.0, 9.0, 10.0])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,
+        pattern_type='hypercardioid',
+        directivity_index=directivity_index,
+    )
+
+
+def _create_violin() -> DirectivityData:
+    """
+    Violin directivity
+    
+    Complex pattern due to body resonances
+    Moderately directional
+    """
+    frequencies = np.array([125, 250, 500, 1000, 2000, 4000, 8000])
+    directivity_index = np.array([0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,
+        pattern_type='cardioid',
+        directivity_index=directivity_index,
+    )
+
+
+def _create_loudspeaker_hifi() -> DirectivityData:
+    """
+    Hi-Fi loudspeaker (typical bookshelf/tower)
+    
+    Characteristics:
+    - Wide dispersion at low freq (large wavelength)
+    - Narrowing at mid freq (driver size effects)
+    - Very narrow at high freq (tweeter directivity)
+    """
+    frequencies = np.array([63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000])
+    
+    # Typical directivity progression
+    directivity_index = np.array([0, 0, 0.5, 1.5, 3.0, 4.5, 6.0, 8.0, 10.0])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,
+        pattern_type='cardioid',
+        directivity_index=directivity_index,
+    )
+
+
+def _create_loudspeaker_pa() -> DirectivityData:
+    """
+    PA (public address) loudspeaker
+    
+    Designed for controlled dispersion:
+    - Constant directivity horn
+    - Narrower pattern than hi-fi
+    - Controlled coverage
+    """
+    frequencies = np.array([125, 250, 500, 1000, 2000, 4000, 8000])
+    directivity_index = np.array([1.0, 2.0, 4.0, 6.0, 6.5, 7.0, 7.5])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,
+        pattern_type='cardioid',
+        directivity_index=directivity_index,
+    )
+
+
+def _create_subwoofer() -> DirectivityData:
+    """
+    Subwoofer (<200 Hz)
+    
+    Essentially omnidirectional due to large wavelengths
+    """
+    frequencies = np.array([20, 31, 63, 125, 250])
+    directivity_index = np.array([0, 0, 0, 0.2, 0.5])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,
+        pattern_type='omnidirectional',
+        directivity_index=directivity_index,
+    )
+
+
+def _create_cardioid_mic() -> DirectivityData:
+    """Cardioid microphone pattern (for reference)"""
+    frequencies = np.array([125, 250, 500, 1000, 2000, 4000, 8000])
+    directivity_index = np.array([4.8, 4.8, 4.8, 5.0, 5.5, 6.0, 6.5])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,
+        pattern_type='cardioid',
+        directivity_index=directivity_index,
+    )
+
+
+# Register presets
+DirectionalSource.PRESETS = {
+    'omnidirectional': _create_omnidirectional,
+    'human_voice': _create_human_voice_speech,
+    'human_voice_speech': _create_human_voice_speech,
+    'human_voice_singing': _create_human_voice_singing,
+    'trumpet': _create_trumpet,
+    'violin': _create_violin,
+    'loudspeaker': _create_loudspeaker_hifi,
+    'loudspeaker_hifi': _create_loudspeaker_hifi,
+    'loudspeaker_pa': _create_loudspeaker_pa,
+    'subwoofer': _create_subwoofer,
+    'cardioid': _create_cardioid_mic,
+}
+
+
+# ============================================================================
+# MEASURED PATTERN IMPORT
+# ============================================================================
+
+def load_measured_pattern(
+    filename: str,
+    format: str = 'gll',  # 'gll', 'json', 'csv'
+) -> DirectivityData:
+    """
+    Load measured directivity pattern from file
+    
+    Supports common formats:
+    - GLL (Generic Loudspeaker Library)
+    - JSON (custom format)
+    - CSV (angles, frequencies, gains)
+    
+    Parameters
+    ----------
+    filename : str
+        Path to file
+    format : str
+        File format
+        
+    Returns
+    -------
+    DirectivityData
+        Loaded pattern
+    """
+    if format == 'gll':
+        return _load_gll(filename)
+    elif format == 'json':
+        return _load_json(filename)
+    elif format == 'csv':
+        return _load_csv(filename)
+    else:
+        raise ValueError(f"Unknown format: {format}")
+
+
+def _load_gll(filename: str) -> DirectivityData:
+    """Load GLL format (industry standard for loudspeakers)"""
+    # GLL parser - simplified version
+    # Full implementation would parse complete GLL syntax
+    raise NotImplementedError("GLL parser coming soon")
+
+
+def _load_json(filename: str) -> DirectivityData:
+    """Load custom JSON format"""
+    with open(filename, 'r') as f:
+        data = json.load(f)
+    
+    return DirectivityData(
+        frequencies=np.array(data['frequencies']),
+        theta=np.array(data.get('theta')),
+        phi=np.array(data.get('phi')),
+        pattern=np.array(data['pattern']),
+        pattern_type='measured',
+        directivity_index=np.array(data.get('directivity_index')),
+    )
+
+
+def _load_csv(filename: str) -> DirectivityData:
+    """Load CSV format (simple angle, freq, gain)"""
+    raise NotImplementedError("CSV parser coming soon")
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+def plot_preset_comparison(presets: List[str], frequency: float = 1000):
+    """
+    Plot multiple preset patterns for comparison
+    
+    Parameters
+    ----------
+    presets : list of str
+        Preset names to compare
+    frequency : float
+        Frequency in Hz
+    """
+    import matplotlib.pyplot as plt
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, subplot_kw={'projection': 'polar'}, figsize=(12, 5))
+    
+    for preset_name in presets:
+        source = DirectionalSource([0, 0, 0], [1, 0, 0], preset_name)
+        
+        # Horizontal plane
+        angles = np.linspace(0, 2*np.pi, 360)
+        gains = []
+        for angle in angles:
+            direction = np.array([np.cos(angle), np.sin(angle), 0])
+            gains.append(source.get_gain(direction, frequency))
+        
+        ax1.plot(angles, gains, label=preset_name, linewidth=2)
+        
+        # Vertical plane
+        gains = []
+        for angle in angles:
+            direction = np.array([np.cos(angle), 0, np.sin(angle)])
+            gains.append(source.get_gain(direction, frequency))
+        
+        ax2.plot(angles, gains, label=preset_name, linewidth=2)
+    
+    ax1.set_title(f'Horizontal Pattern @ {frequency:.0f} Hz')
+    ax1.legend(loc='upper left', bbox_to_anchor=(1.1, 1))
+    ax1.grid(True)
+    
+    ax2.set_title(f'Vertical Pattern @ {frequency:.0f} Hz')
+    ax2.legend(loc='upper left', bbox_to_anchor=(1.1, 1))
+    ax2.grid(True)
+    
+    plt.tight_layout()
+    return fig
+
+
+def compute_coverage_angle(
+    source: DirectionalSource,
+    frequency: float,
+    attenuation_db: float = 6,
+) -> float:
+    """
+    Compute coverage angle at given attenuation
+    
+    Parameters
+    ----------
+    source : DirectionalSource
+        Source to analyze
+    frequency : float
+        Frequency in Hz
+    attenuation_db : float
+        Attenuation level (e.g., -6 dB for half-power)
+        
+    Returns
+    -------
+    coverage_angle : float
+        Total coverage angle in degrees
+    """
+    target_gain = 10**(attenuation_db / 20)
+    
+    # Search for angle where gain drops to target
+    angles = np.linspace(0, np.pi, 1000)
+    for angle in angles:
+        direction = np.array([np.cos(angle), np.sin(angle), 0])
+        gain = source.get_gain(direction, frequency)
+        
+        if gain < target_gain:
+            # Found coverage edge
+            return float(2 * np.degrees(angle))
+    
+    return 360.0  # Full omnidirectional
+
+
+
+#-------------------
+# evaluate reference sphearical data
+# helping code to obtain precomputed SH data 
+# https://github.com/polarch/Spherical-Harmonic-Transform
+
+from scipy.special import sph_harm
+import numpy as np
+
+def evaluate_spherical_harmonics(
+    sh_coeffs: np.ndarray,
+    sh_order: int,
+    theta: float,
+    phi: float,
+    normalization: str = 'N3D'
+) -> float:
+    """
+    Evaluate spherical harmonics pattern at given angles
+    
+    Parameters
+    ----------
+    sh_coeffs : ndarray (n_sh,)
+        SH coefficients (complex or real)
+        Order: ACN (n²+n+m)
+    sh_order : int
+        Maximum SH order
+    theta : float
+        Elevation angle [0, π]
+    phi : float
+        Azimuth angle [0, 2π]
+    normalization : str
+        'N3D' or 'SN3D'
+        
+    Returns
+    -------
+    gain : float
+        Directivity gain at (theta, phi)
+    """
+    # Ensure complex coefficients
+    if not np.iscomplexobj(sh_coeffs):
+        sh_coeffs = sh_coeffs.astype(complex)
+    
+    # Accumulate contribution from each SH component
+    gain = 0.0
+    idx = 0
+    
+    for n in range(sh_order + 1):
+        for m in range(-n, n + 1):
+            if idx >= len(sh_coeffs):
+                break
+            
+            # Compute spherical harmonic Y_n^m(theta, phi)
+            # Note: scipy uses (m, n) order!
+            Y_nm = sph_harm(m, n, phi, theta)
+            
+            # Apply normalization
+            if normalization == 'SN3D':
+                # Convert SN3D to N3D
+                norm_factor = np.sqrt(4 * np.pi / (2 * n + 1))
+                Y_nm *= norm_factor
+            
+            # Add contribution
+            # Real part because directivity is real-valued
+            gain += np.real(sh_coeffs[idx] * np.conj(Y_nm))
+            
+            idx += 1
+    
+    # Ensure non-negative (directivity is positive)
+    gain = max(0.0, np.real(gain))
+    
+    return gain
+
+
+def sh_order_from_coeffs(n_coeffs: int) -> int:
+    """
+    Determine SH order from number of coefficients
+    
+    n_coeffs = (order + 1)²
+    order = sqrt(n_coeffs) - 1
+    """
+    order = int(np.sqrt(n_coeffs)) - 1
+    assert (order + 1)**2 == n_coeffs, "Invalid number of SH coefficients"
+    return order
+
+# dealing with sphearical harmonics files format 
+
+import sofar  # pip install pysofaconventions
+
+def load_sh_from_sofa(filename: str) -> DirectivityData:
+    """
+    Load spherical harmonics from SOFA file
+    
+    Parameters
+    ----------
+    filename : str
+        Path to .sofa file
+        
+    Returns
+    -------
+    DirectivityData
+        With SH coefficients
+    """
+    sofa = sofar.read_sofa(filename)
+    # Extract data
+    sh_coeffs_real = sofa.Data.Real
+    sh_coeffs_imag = sofa.Data.Imag
+    sh_coeffs = sh_coeffs_real + 1j * sh_coeffs_imag
+    
+    frequencies = sofa.M.Frequencies
+    sh_order = sofa.M.SHOrder
+    
+    # Reshape if needed: (n_freq, n_sh)
+    if sh_coeffs.ndim == 3:
+        # (n_sources, n_freq, n_sh) → take first source
+        sh_coeffs = sh_coeffs[0]
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        sh_coefficients=sh_coeffs,
+        sh_order=sh_order,
+        sh_normalization='N3D',  # SOFA default
+        pattern_type='spherical_harmonics'
+    )
+
+
+
+# Example usage
+def process_measured_directivity(
+    audio_files: list,      # Recordings from different angles
+    angles: list,           # (theta, phi) for each recording
+    frequencies: np.ndarray,
+    sh_order: int = 5,
+) -> DirectivityData:
+    """
+    Process measured directivity into SH format
+    
+    Steps:
+    1. Load audio files
+    2. Compute frequency response for each angle
+    3. Fit SH coefficients per frequency
+    4. Store in DirectivityData
+    """
+    # Extract frequency responses
+    n_angles = len(audio_files)
+    n_freq = len(frequencies)
+    
+    responses = np.zeros((n_angles, n_freq), dtype=complex)
+    
+    for i, audio_file in enumerate(audio_files):
+        # Load and FFT
+        audio, sr = librosa.load(audio_file)
+        spectrum = np.fft.rfft(audio)
+        freq_bins = np.fft.rfftfreq(len(audio), 1/sr)
+        
+        # Interpolate to desired frequencies
+        for j, f in enumerate(frequencies):
+            idx = np.argmin(np.abs(freq_bins - f))
+            responses[i, j] = spectrum[idx]
+    
+    # Fit SH coefficients per frequency
+    sh_coeffs_all = np.zeros((n_freq, (sh_order+1)**2), dtype=complex)
+    
+    theta = np.array([a[0] for a in angles])
+    phi = np.array([a[1] for a in angles])
+    
+    for j in range(n_freq):
+        sh_coeffs_all[j] = balloon_to_sh(
+            responses[:, j],
+            theta, phi,
+            sh_order
+        )
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        sh_coefficients=sh_coeffs_all,
+        sh_order=sh_order,
+        sh_normalization='N3D',
+        pattern_type='spherical_harmonics'
+    )
+    
+#--------------------
+
+
+if __name__ == "__main__":
+    # Demonstration
+    print("="*70)
+    print("SOURCE DIRECTIVITY DEMONSTRATION")
+    print("="*70)
+    
+    print("\nAvailable presets:")
+    for i, preset in enumerate(DirectionalSource.PRESETS.keys(), 1):
+        print(f"  {i}. {preset}")
+    
+    # Create example sources
+    print("\n" + "="*70)
+    print("EXAMPLE: Human Voice")
+    print("="*70)
+    
+    voice = DirectionalSource(
+        position=[0, 0, 1.7],
+        orientation=[1, 0, 0],
+        directivity='human_voice'
+    )
+    
+    # Show directivity at different angles
+    test_freqs = [500, 1000, 4000]
+    test_angles = [0, 30, 60, 90, 120, 150, 180]
+    
+    print(f"\n{'Angle':>8} | ", end="")
+    for f in test_freqs:
+        print(f"{f:>8} Hz | ", end="")
+    print("\n" + "-"*50)
+    
+    for angle_deg in test_angles:
+        angle_rad = np.radians(angle_deg)
+        direction = np.array([np.cos(angle_rad), np.sin(angle_rad), 0])
+        
+        print(f"{angle_deg:>8}° | ", end="")
+        for freq in test_freqs:
+            gain = voice.get_gain(direction, freq)
+            gain_db = 20 * np.log10(gain + 1e-10)
+            print(f"{gain_db:>8.1f} | ", end="")
+        print()
+    
+    # Coverage angles
+    print("\n" + "="*70)
+    print("COVERAGE ANGLES (-6 dB points)")
+    print("="*70)
+    
+    for preset_name in ['omnidirectional', 'human_voice', 'trumpet', 'loudspeaker_pa']:
+        source = DirectionalSource([0,0,0], [1,0,0], preset_name)
+        print(f"\n{preset_name}:")
+        for freq in [500, 1000, 2000, 4000]:
+            coverage = compute_coverage_angle(source, freq, -6)
+            print(f"  {freq:>5} Hz: {coverage:>6.1f}°")
+    
+    print("\n" + "="*70)
+    print("To visualize patterns, use:")
+    print("  source.plot_pattern(frequency=1000)")
+    print("  plot_preset_comparison(['human_voice', 'trumpet'], 1000)")
+    print("="*70)
