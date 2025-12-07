@@ -1,8 +1,9 @@
 import numpy as np
-from .fdtd import FDTDSolver
 from scipy.signal import fftconvolve
-from ..hybrid.hybrid import HybridRenderer
 from scipy.signal import butter, sosfilt, resample
+
+from .fdtd import FDTDSolver
+from ..hybrid.hybrid import HybridRenderer
 
 
 def add_to_mix(mix, signal):

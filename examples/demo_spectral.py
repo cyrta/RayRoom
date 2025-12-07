@@ -1,9 +1,10 @@
-import sys
 import os
+import sys
 import argparse
 import numpy as np
 from scipy.io import wavfile
 import matplotlib.pyplot as plt
+
 from rayroom import Room, Source, Receiver, AmbisonicReceiver, SpectralRenderer, get_material, Person
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))

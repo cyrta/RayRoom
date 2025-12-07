@@ -1,5 +1,6 @@
 import numpy as np
 from tqdm import tqdm
+
 from ...core.physics import air_absorption_coefficient
 from ...core.constants import C_SOUND
 from ...core.geometry import (
@@ -8,7 +9,7 @@ from ...core.geometry import (
     reflect_vector,
     random_direction_hemisphere,
 )
-from ...room.objects import Receiver, AmbisonicReceiver
+from ...room.objects import AmbisonicReceiver
 
 
 class RayTracer:

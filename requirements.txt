@@ -1,6 +1,5 @@
+tqdm
 numpy
 scipy
-matplotlib
-tqdm
-
 flake8
+matplotlib

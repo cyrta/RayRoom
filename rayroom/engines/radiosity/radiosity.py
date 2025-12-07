@@ -1,8 +1,9 @@
 import numpy as np
 from scipy.signal import fftconvolve
-from ..hybrid.hybrid import HybridRenderer
+
 from .core import RadiositySolver
 from ...core.utils import generate_rir
+from ..hybrid.hybrid import HybridRenderer
 from ...room.objects import Receiver, AmbisonicReceiver
 
 

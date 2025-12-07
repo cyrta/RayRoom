@@ -1,7 +1,8 @@
 import numpy as np
 from tqdm import tqdm
-from ...core.geometry import normalize
+
 from ...core.constants import C_SOUND
+
 
 class RadiositySolver:
     """
@@ -18,10 +19,10 @@ class RadiositySolver:
         self.patch_size = patch_size
         self.patches = []
         self.view_factors = None
-        
+
         # 1. Discretize Room into Patches
         self._create_patches()
-        
+
         # 2. Compute Form Factors (View Factors)
         # This is an N x N matrix calculation. Can be slow.
         self._compute_view_factors()
@@ -32,7 +33,7 @@ class RadiositySolver:
         """
         print(f"Radiosity: Meshing walls with patch_size={self.patch_size}m...")
         self.patches = []
-        
+
         for wall in self.room.walls:
             # Assuming rectangular walls for simple subdivision
             # Generic polygon subdivision is harder (Delaunay or grid clipping)

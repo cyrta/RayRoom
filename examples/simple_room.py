@@ -1,8 +1,10 @@
-from rayroom import Room, Source, Receiver, Person, RayTracer, get_material
+import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
-import os
+
+from rayroom import Room, Source, Receiver, Person, RayTracer, get_material
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 

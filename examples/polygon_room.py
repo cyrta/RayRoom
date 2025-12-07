@@ -1,6 +1,7 @@
 import os
 import sys
 import matplotlib.pyplot as plt
+
 from rayroom import Room, Source, Receiver, RayTracer
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
