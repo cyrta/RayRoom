@@ -34,6 +34,18 @@ The process involves several steps:
 2.  **Parallel Simulation:** The low-pass signal is used as input for the FDTD simulation. Simultaneously, the high-pass signal is used as input for the Hybrid Geometric simulation.
 3.  **Recombination:** The two resulting impulse responses (one from FDTD, one from the geometric engine) are summed together to create the final broadband RIR.
 
+### Block Diagram
+
+```mermaid
+graph TD
+    A[Input Source Audio] --> B{Crossover Filter};
+    B -- Low-pass Signal (< crossover_freq) --> C[FDTD Simulation];
+    B -- High-pass Signal (> crossover_freq) --> D["Hybrid Geometric Simulation <br> (ISM + Ray Tracing)"];
+    C --> E{Summation};
+    D --> E;
+    E --> F[Final Broadband RIR];
+```
+
 ## Implementation Details
 
 -   **Voxelization:** The room geometry, including all objects and material properties, is discretized onto the 3D grid. This process is a key step that can affect the accuracy of the simulation.
