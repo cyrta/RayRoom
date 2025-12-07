@@ -164,13 +164,13 @@ See `examples/polygon_room.py` for creating rooms from 2D floor plans.
 
 ## Structure
 
-- `rayroom/room.py`: Room and wall definitions.
-- `rayroom/objects.py`: Source, Receiver, Furniture classes.
-- `rayroom/materials.py`: Material properties.
-- `rayroom/geometry.py`: Vector math and intersection tests.
-- `rayroom/physics.py`: Acoustic physics models.
-- `rayroom/visualize.py`: Visualization tools.
-- `rayroom/utils.py`: Utility functions.
+- `rayroom/room/base.py`: Room and wall definitions.
+- `rayroom/room/objects.py`: Source, Receiver, and Furniture classes.
+- `rayroom/room/materials.py`: Material properties.
+- `rayroom/core/geometry.py`: Vector math and intersection tests.
+- `rayroom/core/physics.py`: Acoustic physics models.
+- `rayroom/room/visualize.py`: Visualization tools.
+- `rayroom/core/utils.py`: Utility functions.
 - `rayroom/engines/raytracer/core.py`: Main Ray Tracing engine.
 - `rayroom/engines/raytracer/audio.py`: Audio processing for ray tracer.
 - `rayroom/engines/ism/ism.py`: Image Source Method engine.
