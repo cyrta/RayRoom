@@ -7,7 +7,7 @@ The core principle is to emit thousands of rays from a sound source in random di
 ### Block Diagram
 
 ```mermaid
-graph TD
+graph LR
     A[Input: Room Geometry, Source/Receiver] --> B{Emit Rays from Source};
     B -- Ray hits surface --> C{Calculate Reflection};
     C -- Specular/Diffuse --> D{Attenuate Energy};

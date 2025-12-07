@@ -37,7 +37,7 @@ The process involves several steps:
 ### Block Diagram
 
 ```mermaid
-graph TD
+graph LR
     A[Input Source Audio] --> B{Crossover Filter};
     B -- Low-pass Signal (< crossover_freq) --> C[FDTD Simulation];
     B -- High-pass Signal (> crossover_freq) --> D["Hybrid Geometric Simulation <br> (ISM + Ray Tracing)"];

@@ -7,7 +7,7 @@ This method is particularly powerful for modeling the early part of a Room Impul
 ### Block Diagram
 
 ```mermaid
-graph TD
+graph LR
     A[Input: Room Geometry, Source/Receiver] --> B{Generate Image Sources};
     B -- up to max_order --> C{Validate Reflection Paths};
     C -- Valid Paths --> D{Compute Delay & Attenuation};

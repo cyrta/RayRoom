@@ -7,7 +7,7 @@ The core idea is to discretize all surfaces in the room (walls, furniture) into 
 ### Block Diagram
 
 ```mermaid
-graph TD
+graph LR
     A[Input: Room Geometry, Source/Receiver] --> B{Discretize Surfaces into Patches};
     B --> C{Calculate View Factors Between Patches};
     C --> D{Iteratively Propagate Energy};

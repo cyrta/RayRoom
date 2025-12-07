@@ -11,7 +11,7 @@ The final RIR is created by cross-fading from the ISM output to the ray tracing 
 ### Block Diagram
 
 ```mermaid
-graph TD
+graph LR
     A[Input Source Audio] --> B{ISM};
     A --> C{Ray Tracing};
     B -- Early Reflections --> D{Cross-fading};
