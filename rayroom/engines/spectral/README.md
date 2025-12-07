@@ -39,9 +39,9 @@ The process involves several steps:
 -   **Voxelization:** The room geometry, including all objects and material properties, is discretized onto the 3D grid. This process is a key step that can affect the accuracy of the simulation.
 -   **Boundary Conditions:** The interaction of sound waves with the room surfaces is handled by implementing impedance boundary conditions on the grid. This allows the model to account for the frequency-dependent absorption of the materials.
 -   **Stability (Courant Condition):** For the FDTD simulation to be numerically stable, the time step $\Delta t$ and the spatial grid spacing $\Delta x$ must satisfy the Courant-Friedrichs-Lewy (CFL) condition:
-    $$
-    c \Delta t \sqrt{\frac{1}{\Delta x^2} + \frac{1}{\Delta y^2} + \frac{1}{\Delta z^2}} \le 1
-    $$
+
+    $c \Delta t \sqrt{\frac{1}{\Delta x^2} + \frac{1}{\Delta y^2} + \frac{1}{\Delta z^2}} \le 1$
+
 -   **Dispersion:** At higher frequencies (relative to the grid spacing), the numerical simulation can introduce inaccuracies where waves of different frequencies travel at slightly different speeds. This is known as numerical dispersion and limits the maximum frequency that an FDTD grid can accurately simulate, reinforcing the need for a hybrid approach.
 
 ## Seminal Papers
