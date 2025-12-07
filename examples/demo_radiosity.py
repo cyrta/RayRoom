@@ -8,14 +8,13 @@ from demo_utils import (
     create_demo_room,
     generate_layouts,
     process_effects_and_save,
+    DEFAULT_SAMPLING_RATE,
 )
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 
 def main(mic_type='mono', output_dir='outputs/radiosity', effects=None):
-    FS = 44100
-
     # 1. Define Room
     room, sources, mic = create_demo_room(mic_type)
     src1 = sources["src1"]
@@ -30,7 +29,7 @@ def main(mic_type='mono', output_dir='outputs/radiosity', effects=None):
 
     # 6. Setup Radiosity Renderer
     print("Initializing Radiosity Renderer...")
-    renderer = RadiosityRenderer(room, fs=FS)
+    renderer = RadiosityRenderer(room, fs=DEFAULT_SAMPLING_RATE)
 
     # 7. Assign Audio Files
     print("Assigning audio files...")
@@ -63,7 +62,7 @@ def main(mic_type='mono', output_dir='outputs/radiosity', effects=None):
     rir = rirs[mic.name]
 
     if mixed_audio is not None:
-        process_effects_and_save(mixed_audio, rir, mic.name, mic_type, FS, output_dir, "radiosity", effects)
+        process_effects_and_save(mixed_audio, rir, mic.name, mic_type, DEFAULT_SAMPLING_RATE, output_dir, "radiosity", effects)
     else:
         print("Error: No audio output generated.")
 

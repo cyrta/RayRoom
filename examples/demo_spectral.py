@@ -11,12 +11,10 @@ from demo_utils import (
     create_demo_room,
     generate_layouts,
     process_effects_and_save,
+    DEFAULT_SAMPLING_RATE,
 )
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-
-FS = 44100
 
 
 def main(mic_type='mono', output_dir='outputs/spectral', effects=None):
@@ -41,7 +39,7 @@ def main(mic_type='mono', output_dir='outputs/spectral', effects=None):
     # FDTD will handle < 500Hz (Diffraction important here).
     # Geometric will handle > 500Hz.
     print("Initializing Spectral Renderer (Crossover: 500 Hz)...")
-    renderer = SpectralRenderer(room, fs=FS, crossover_freq=500.0)
+    renderer = SpectralRenderer(room, fs=DEFAULT_SAMPLING_RATE, crossover_freq=500.0)
 
     # 7. Assign Audio
     print("Assigning audio...")
@@ -55,7 +53,7 @@ def main(mic_type='mono', output_dir='outputs/spectral', effects=None):
     if not os.path.exists(audio_file_1):
         print("Warning: Audio file not found. Creating dummy sine sweep.")
         # Create dummy audio
-        t = np.linspace(0, 1, FS)
+        t = np.linspace(0, 1, DEFAULT_SAMPLING_RATE)
         audio = np.sin(2 * np.pi * 200 * t * t)  # Sweep
         renderer.set_source_audio(src1, audio, gain=1.0)
         renderer.set_source_audio(src2, audio, gain=1.0)
@@ -81,7 +79,8 @@ def main(mic_type='mono', output_dir='outputs/spectral', effects=None):
         max_hops=10,
         rir_duration=1.0,  # Short duration for demo speed
         record_paths=False,
-        ism_order=1
+        ism_order=1,
+        show_path_plot=False
     )
 
     # 9. Save Result
@@ -89,7 +88,7 @@ def main(mic_type='mono', output_dir='outputs/spectral', effects=None):
     rir = rirs[mic.name]
 
     if mixed_audio is not None:
-        process_effects_and_save(mixed_audio, rir, mic.name, mic_type, FS, output_dir, "spectral", effects)
+        process_effects_and_save(mixed_audio, rir, mic.name, mic_type, DEFAULT_SAMPLING_RATE, output_dir, "spectral", effects)
     else:
         print("Error: No audio output generated.")
 

@@ -10,12 +10,10 @@ from demo_utils import (
     create_demo_room,
     generate_layouts,
     process_effects_and_save,
+    DEFAULT_SAMPLING_RATE,
 )
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-
-FS = 44100
 
 
 def main(mic_type='mono', output_dir='outputs/hybrid', effects=None):
@@ -37,7 +35,7 @@ def main(mic_type='mono', output_dir='outputs/hybrid', effects=None):
 
     # 6. Setup Hybrid Renderer
     print("Initializing Hybrid Renderer...")
-    renderer = HybridRenderer(room, fs=FS, temperature=20.0, humidity=50.0)
+    renderer = HybridRenderer(room, fs=DEFAULT_SAMPLING_RATE, temperature=20.0, humidity=50.0)
 
     # Assign Audio Files
     print("Assigning audio files...")
@@ -64,7 +62,8 @@ def main(mic_type='mono', output_dir='outputs/hybrid', effects=None):
         rir_duration=1.5,
         record_paths=True,
         interference=False,
-        ism_order=2         # Enable Hybrid Mode
+        ism_order=2,         # Enable Hybrid Mode
+        show_path_plot=False
     )
 
     # 8. Save Result
@@ -72,7 +71,9 @@ def main(mic_type='mono', output_dir='outputs/hybrid', effects=None):
     rir = rirs[mic.name]
 
     if mixed_audio is not None:
-        process_effects_and_save(mixed_audio, rir, mic.name, mic_type, FS, output_dir, "hybrid", effects)
+        process_effects_and_save(
+            mixed_audio, rir, mic.name, mic_type, DEFAULT_SAMPLING_RATE, output_dir, "hybrid", effects
+        )
     else:
         print("Error: No audio output generated.")
 

@@ -1,7 +1,6 @@
 import numpy as np
 from pedalboard import (
     Pedalboard,
-    Chorus,
     Compressor,
     Delay,
     Distortion,

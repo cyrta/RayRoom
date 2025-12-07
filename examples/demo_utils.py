@@ -23,6 +23,9 @@ from rayroom.room.visualize import (
 from rayroom.effects import presets
 
 
+DEFAULT_SAMPLING_RATE = 44100
+
+
 def create_demo_room(mic_type='mono'):
     """
     Creates a standard demo room with furniture, sources, and a receiver.
@@ -182,10 +185,10 @@ def process_effects_and_save(mixed_audio, rir, mic_name, mic_type, fs, output_di
                 print(f"Warning: Effect '{effect}' not found.")
                 continue
 
-            current_output_dir = os.path.join(output_dir, f"{mic_type}-{effect}")
+            current_output_dir = os.path.join(output_dir, effect)
         else:
             # "original" case
-            current_output_dir = os.path.join(output_dir, f"{mic_type}-original")
+            current_output_dir = os.path.join(output_dir, "original")
 
         os.makedirs(current_output_dir, exist_ok=True)
 

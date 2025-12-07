@@ -10,12 +10,10 @@ from demo_utils import (
     create_demo_room,
     generate_layouts,
     process_effects_and_save,
+    DEFAULT_SAMPLING_RATE,
 )
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-
-FS = 44100
 
 
 def main(mic_type='mono', output_dir='outputs', effects=None):
@@ -35,7 +33,7 @@ def main(mic_type='mono', output_dir='outputs', effects=None):
 
     # 6. Setup Ray-tracing Renderer
     print("Initializing Ray-tracing Renderer...")
-    renderer = RaytracingRenderer(room, fs=FS, temperature=20.0, humidity=50.0)
+    renderer = RaytracingRenderer(room, fs=DEFAULT_SAMPLING_RATE, temperature=20.0, humidity=50.0)
 
     # 7. Assign Audio Files
     print("Assigning audio files...")
@@ -72,7 +70,9 @@ def main(mic_type='mono', output_dir='outputs', effects=None):
         print("Error: No audio output generated.")
         return
 
-    process_effects_and_save(mixed_audio, rir, mic.name, mic_type, FS, output_dir, "raytracing", effects)
+    process_effects_and_save(
+        mixed_audio, rir, mic.name, mic_type, DEFAULT_SAMPLING_RATE, output_dir, "raytracing", effects
+    )
 
 
 if __name__ == "__main__":

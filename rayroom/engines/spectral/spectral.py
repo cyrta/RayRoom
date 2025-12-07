@@ -65,7 +65,7 @@ class SpectralRenderer(HybridRenderer):
         self.fdtd = FDTDSolver(room, max_freq=crossover_freq * 1.2)
 
     def render(self, n_rays=20000, max_hops=50, rir_duration=1.5,
-               verbose=True, record_paths=False, ism_order=2):
+               verbose=True, record_paths=False, ism_order=2, show_path_plot=False):
         """
         Run the spectral hybrid pipeline.
         """
@@ -75,7 +75,7 @@ class SpectralRenderer(HybridRenderer):
 
         # Get the full-band geometric audio, which is valid for the high-frequency part
         geo_outputs = super().render(n_rays, max_hops, rir_duration,
-                                     verbose, record_paths, False, ism_order)
+                                     verbose, record_paths, False, ism_order, show_path_plot=show_path_plot)
 
         paths = None
         if record_paths:

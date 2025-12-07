@@ -66,7 +66,7 @@ class HybridRenderer:
 
     def render(self, n_rays=10000, max_hops=50, rir_duration=2.0,
                verbose=True, record_paths=False, interference=False,
-               ism_order=3):
+               ism_order=3, show_path_plot=False):
         """
         Run the hybrid rendering pipeline.
         """
