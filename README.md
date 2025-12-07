@@ -50,6 +50,59 @@ Solves the acoustic wave equation on a 3D grid.
 - **Hybrid Renderer**: Combines ISM (Early) and Ray Tracing (Late) for a complete impulse response.
 - **Spectral Renderer**: Splits the audio spectrum. Uses **FDTD** for low frequencies (Wave physics) and **Hybrid Geometric** (ISM+Ray) for high frequencies.
 
+## Architecture
+
+Here is a high-level overview of the library's architecture, showing the relationship between the different rendering engines.
+
+```mermaid
+graph TD
+    subgraph "User Workflow"
+        direction LR
+        A[1. Define Room]
+        B[2. Add Sources/Mics]
+        C[3. Select Renderer]
+    end
+
+    subgraph "Core Components"
+        RoomModel["Room Model"]
+        Physics["Acoustic Physics"]
+    end
+
+    subgraph "Standalone Rendering Engines"
+        Raytracer["<b>Ray Tracing</b><br><i>Stochastic late reflections</i>"]
+        ISM["<b>Image Source Method</b><br><i>Deterministic early reflections</i>"]
+        FDTD["<b>FDTD Solver</b><br><i>Low-frequency wave physics</i>"]
+        Radiosity["<b>Acoustic Radiosity</b><br><i>Diffuse field energy</i>"]
+    end
+
+    subgraph "Advanced Hybrid Renderers"
+        Hybrid["<b>HybridRenderer</b><br>Combines ISM and Ray Tracing"]
+        Spectral["<b>SpectralRenderer</b><br>Combines FDTD and Hybrid"]
+    end
+
+    C --> Raytracer
+    C --> ISM
+    C --> FDTD
+    C --> Radiosity
+    C --> Hybrid
+    C --> Spectral
+
+    Raytracer --> RoomModel
+    ISM --> RoomModel
+    FDTD --> RoomModel
+    Radiosity --> RoomModel
+
+    Raytracer --> Physics
+    ISM --> Physics
+    FDTD --> Physics
+    Radiosity --> Physics
+
+    Hybrid --> ISM
+    Hybrid --> Raytracer
+    Spectral --> FDTD
+    Spectral --> Hybrid
+```
+
 ## Installation
 
 You can install RayRoom directly from PyPI:
