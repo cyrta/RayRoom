@@ -77,6 +77,12 @@ class SpectralRenderer(HybridRenderer):
         geo_outputs = super().render(n_rays, max_hops, rir_duration,
                                      verbose, record_paths, False, ism_order)
 
+        paths = None
+        if record_paths:
+            geo_audio_dict, paths, geo_rirs = geo_outputs
+        else:
+            geo_audio_dict, geo_rirs = geo_outputs
+
         if verbose:
             print("Phase 2: Wave Simulation (Low Frequency)...")
 
@@ -85,8 +91,6 @@ class SpectralRenderer(HybridRenderer):
         # Create high-pass and low-pass filters
         sos_lp = butter(4, self.crossover_freq, 'low', fs=self.fs, output='sos')
         sos_hp = butter(4, self.crossover_freq, 'high', fs=self.fs, output='sos')
-
-        geo_audio_dict = geo_outputs[0] if isinstance(geo_outputs, tuple) else geo_outputs
 
         # 1. High-pass filter the geometric part to get the HF audio
         hpf_geo_outputs = {
@@ -134,7 +138,9 @@ class SpectralRenderer(HybridRenderer):
             lpf_part = lpf_audio_accumulator.get(rx.name)
             final_outputs[rx.name] = add_to_mix(hpf_part, lpf_part)
 
+        # The returned RIR is from the geometric part only.
+        # A true hybrid RIR would involve combining LF and HF RIRs.
         if record_paths:
-            return final_outputs, geo_outputs[1] if isinstance(geo_outputs, tuple) else {}
+            return final_outputs, paths, geo_rirs
 
-        return final_outputs
+        return final_outputs, geo_rirs

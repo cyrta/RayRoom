@@ -1,19 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from ..analytics.acoustics import (
+    schroeder_integration,
+    calculate_rt60,
+    octave_band_filter,
+    get_octave_bands,
+)
 
 
 def plot_room(room, filename=None, show=True):
-    """
-    Plot the room in 3D using Matplotlib.
-
-    :param room: The Room object to visualize.
-    :type room: rayroom.room.Room
-    :param filename: Path to save the image. If None, the image is not saved.
-    :type filename: str, optional
-    :param show: Whether to show the interactive plot window. Defaults to True.
-    :type show: bool
-    """
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
 
@@ -397,6 +393,167 @@ def plot_room_2d(room, filename=None, show=True):
     if filename:
         plt.savefig(filename, dpi=150)
         print(f"Room 2D image saved to {filename}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
+def plot_reverberation_time(rir, fs, filename=None, show=True):
+    """
+    Plot RT60 across standard octave bands.
+
+    :param rir: Room Impulse Response.
+    :param fs: Sampling frequency.
+    :param filename: Path to save the plot.
+    :param show: Whether to display the plot.
+    """
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bands = get_octave_bands(subdivisions=10)
+    rt60s = []
+    for freq in bands:
+        filtered_rir = octave_band_filter(rir, fs, freq)
+        sch_db = schroeder_integration(filtered_rir)
+        rt60 = calculate_rt60(sch_db, fs)
+        rt60s.append(rt60)
+
+    # Filter out NaN values to prevent plotting issues
+    valid_indices = ~np.isnan(rt60s)
+    bands_to_plot = np.array(bands)[valid_indices]
+    rt60s_to_plot = np.array(rt60s)[valid_indices]
+
+    ax.plot(bands_to_plot, rt60s_to_plot, '-', label='T20')
+    ax.set_xscale('log')
+    base_bands = get_octave_bands(subdivisions=1)
+    ax.set_xticks(base_bands)
+    ax.set_xticklabels([str(b) for b in base_bands])
+    ax.minorticks_on()
+    ax.set_xlim(left=125)
+
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel("Reverberation Time (s)")
+    ax.set_title("Reverberation Time (RT60)")
+    ax.grid(True, which="both", ls="--", alpha=0.6)
+    ax.set_ylim(bottom=0)
+    plt.tight_layout()
+    if filename:
+        plt.savefig(filename, dpi=150)
+        print(f"Reverberation time plot saved to {filename}")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
+def plot_decay_curve(rir, fs, band=None, schroeder=False, filename=None, show=True):
+    """
+    Plot the energy decay curve for the RIR.
+
+    :param rir: Room Impulse Response.
+    :param fs: Sampling frequency.
+    :param band: Center frequency of an octave band to filter for. If None, broadband is used.
+    :param schroeder: If True, plot the Schroeder curve. Otherwise, plot the filtered envelope.
+    :param filename: Path to save the plot.
+    :param show: Whether to display the plot.
+    """
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    target_rir = rir
+    title = "Energy Decay Curve"
+    if band:
+        target_rir = octave_band_filter(rir, fs, band)
+        title += f" ({band} Hz Octave Band)"
+
+    is_ambisonic = target_rir.ndim > 1
+
+    if schroeder:
+        # For Schroeder, we still analyze the W channel for ambisonic
+        rir_to_process = target_rir[:, 0] if is_ambisonic else target_rir
+        sch_db = schroeder_integration(rir_to_process)
+        time_axis = np.arange(len(sch_db)) / fs
+
+        ax.plot(time_axis * 1000, sch_db, label="Schroeder Curve")
+        ax.set_xlabel("Time (ms)")
+        ax.set_ylim(-80, 5)  # Typical dynamic range for RIRs
+
+        # Find where the curve drops to -60dB for a better x-axis limit
+        below_60_indices = np.where(sch_db <= -60)[0]
+        if len(below_60_indices) > 0:
+            # Get the time of the first sample that drops below -60dB
+            t_60_db = time_axis[below_60_indices[0]] * 1000
+            # Set x-limit to be a bit beyond this point
+            ax.set_xlim(0, t_60_db * 1.1)
+        else:
+            # Fallback if the decay never reaches -60dB
+            max_time_ms = time_axis.max() * 1000
+            ax.set_xlim(0, max_time_ms * 1.1)
+
+        title += " - Schroeder Method"
+
+    else:
+        # Decay curve as a line plot
+        if is_ambisonic:
+            # Multi-channel line plot for Ambisonic
+            channels = ['W', 'X', 'Y', 'Z']
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+            num_channels = target_rir.shape[1]
+
+            for i in range(num_channels):
+                sch_db = schroeder_integration(target_rir[:, i])
+                time_axis = np.arange(len(sch_db)) / fs
+                ax.plot(time_axis, sch_db, label=f"Channel {channels[i]}", color=colors[i % len(colors)])
+
+        else:  # Mono plot
+            sch_db = schroeder_integration(target_rir)
+            time_axis = np.arange(len(sch_db)) / fs
+            ax.plot(time_axis, sch_db, label="Decay Curve")
+
+        ax.set_xlabel("Time (s)")
+        ax.set_ylim(-80, 5)  # Positive range for absolute values
+        ax.set_xlim(0, 0.45)
+    ax.set_ylabel("Sound Pressure Level (dB)")
+    ax.set_title(title)
+    ax.grid(True, which="both", ls="--", alpha=0.6)
+    # Add RT60 line if possible, calculated from W channel for ambisonic
+    rir_for_rt60 = target_rir[:, 0] if is_ambisonic else target_rir
+    sch_db_rt60 = schroeder_integration(rir_for_rt60)
+    rt60 = calculate_rt60(sch_db_rt60, fs)
+    if not np.isnan(rt60):
+        y_level = -60
+        ax.axhline(y_level, color='r', linestyle='--', label=f'RT60: {rt60:.2f} s')
+    ax.legend()
+    plt.tight_layout()
+    if filename:
+        plt.savefig(filename, dpi=150)
+        print(f"Decay curve plot saved to {filename}")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
+def plot_spectrogram(audio_data, fs, title="Spectrogram", filename=None, show=True):
+    """
+    Plot the spectrogram of an audio signal.
+
+    :param audio_data: The audio signal.
+    :param fs: Sampling frequency.
+    :param title: Title of the plot.
+    :param filename: Path to save the plot.
+    :param show: Whether to display the plot.
+    """
+    fig, ax = plt.subplots(figsize=(10, 4))
+    Pxx, freqs, bins, im = ax.specgram(audio_data, Fs=fs, NFFT=1024, noverlap=512)
+    fig.colorbar(im, ax=ax, format='%+2.0f dB')
+    ax.set_title(title)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Frequency (Hz)")
+    plt.tight_layout()
+
+    if filename:
+        plt.savefig(filename, dpi=150)
+        print(f"Spectrogram saved to {filename}")
 
     if show:
         plt.show()

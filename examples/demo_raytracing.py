@@ -3,23 +3,41 @@ import sys
 import argparse
 import numpy as np
 from scipy.io import wavfile
-import matplotlib.pyplot as plt
+import json
 
-from rayroom import Room, Source, Receiver, AmbisonicReceiver, RaytracingRenderer, get_material, Person
+from rayroom import (
+    Room,
+    Source,
+    Receiver,
+    AmbisonicReceiver,
+    RaytracingRenderer,
+    get_material,
+    Person,
+)
+from rayroom.analytics.acoustics import (
+    calculate_clarity,
+    calculate_drr,
+)
+from rayroom.room.visualize import (
+    plot_reverberation_time,
+    plot_decay_curve,
+    plot_spectrogram,
+)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 
-def main(mic_type='mono', output_dir='outputs'):
-    FS = 44100
+FS = 44100
 
+
+def main(mic_type='mono', output_dir='outputs'):
     # 1. Define Room for Raytracing (8 square meters -> e.g., 4m x 2m or 2.83m x 2.83m)
     # Using 4m x 2m x 2.5m height
     print("Creating room for raytracing demo (4m x 2m x 2.5m)...")
     room = Room.create_shoebox([4, 2, 2.5], materials={
-        "floor": get_material("heavy_curtain"),
-        "ceiling": get_material("heavy_curtain"),
-        "walls": get_material("wood")
+        "floor": get_material("carpet"),
+        "ceiling": get_material("plaster"),
+        "walls": get_material("concrete")
     })
 
     # 2. Add Receiver (Microphone) - centered
@@ -65,7 +83,8 @@ def main(mic_type='mono', output_dir='outputs'):
     room.plot(os.path.join(output_dir, "raytracing_layout.png"), show=False)
     room.plot(os.path.join(output_dir, "raytracing_layout_2d.png"), show=False, view='2d')
 
-    # 6. Setup Renderer
+    # 6. Setup Ray-tracing Renderer
+    print("Initializing Ray-tracing Renderer...")
     renderer = RaytracingRenderer(room, fs=FS, temperature=20.0, humidity=50.0)
 
     # 7. Assign Audio Files
@@ -88,15 +107,12 @@ def main(mic_type='mono', output_dir='outputs'):
     renderer.set_source_audio(src_bg, os.path.join(base_path, "foreground.wav"), gain=0.1)
 
     # 8. Render
-    print("Starting rendering pipeline...")
-    # Smaller room might need fewer rays or hops, but keeping high for quality
-    outputs, paths_data = renderer.render(
-        n_rays=30000,
-        max_hops=40,
-        rir_duration=1.5,
-        record_paths=True,
-        interference=False
-    )  # With interference=False, the audio is much cleaner.
+    print("Starting Ray-tracing Rendering pipeline...")
+    outputs, rirs = renderer.render(
+        n_rays=20000,
+        max_hops=50,
+        rir_duration=1.5
+    )
 
     # 9. Save Result
     print(
@@ -125,14 +141,73 @@ def main(mic_type='mono', output_dir='outputs'):
             wavfile.write(os.path.join(output_dir, output_file), FS, (mixed_audio * 32767).astype(np.int16))
         print(f"Simulation complete. Saved to {os.path.join(output_dir, output_file)}")
 
-        # Plot Spectrogram (of the W channel for ambisonic)
-        plot_audio = mixed_audio[:, 0] if mic_type == 'ambisonic' and mixed_audio.ndim > 1 else mixed_audio
-        plt.figure(figsize=(10, 4))
-        plt.specgram(plot_audio, Fs=FS, NFFT=1024, noverlap=512)
-        plt.title(f"Output Spectrogram (Raytracing, {mic_type})")
-        plt.colorbar(format='%+2.0f dB')
-        plt.savefig(os.path.join(output_dir, f"raytracing_spectrogram_{mic_type}.png"))
-        print(f"Saved raytracing_spectrogram_{mic_type}.png to {output_dir}")
+        # --- Generate new acoustic plots ---
+        rir = rirs[mic.name]
+        # For ambisonic, use the first channel (W) for analysis
+        if mic_type == 'ambisonic' and rir.ndim > 1:
+            rir = rir[:, 0]
+
+        # 1. RT60 vs. Frequency
+        rt_path = os.path.join(output_dir, f"reverberation_time_{mic_type}.png")
+        plot_reverberation_time(rir, FS, filename=rt_path, show=False)
+
+        # 2. Decay curve for one octave band (e.g., 1000 Hz)
+        decay_path = os.path.join(output_dir, f"decay_curve_1000hz_{mic_type}.png")
+        plot_decay_curve(rir, FS, band=1000, schroeder=False, filename=decay_path, show=False)
+
+        # 3. Schroeder curve (broadband)
+        schroeder_path = os.path.join(output_dir, f"schroeder_curve_{mic_type}.png")
+        plot_decay_curve(rir, FS, schroeder=True, filename=schroeder_path, show=False)
+        # --- End of new plots ---
+
+        # --- Calculate and print new metrics ---
+        c50 = calculate_clarity(rir, FS, 50)
+        c80 = calculate_clarity(rir, FS, 80)
+        drr = calculate_drr(rir, FS)
+
+        print("\nAcoustic Metrics:")
+        print(f"  - C50 (Speech Clarity): {c50:.2f} dB")
+        print(f"  - C80 (Music Clarity):  {c80:.2f} dB")
+        print(f"  - DRR (Direct-to-Reverberant Ratio): {drr:.2f} dB")
+
+        # --- Save metrics to JSON ---
+        metrics = {
+            "c50_db": c50,
+            "c80_db": c80,
+            "drr_db": drr,
+        }
+        metrics_path = os.path.join(output_dir, "acoustic_metrics.json")
+        with open(metrics_path, 'w') as f:
+            json.dump(metrics, f, indent=4)
+        print(f"Acoustic metrics saved to {metrics_path}")
+        # --- End of new metrics ---
+
+        # Plot Spectrogram
+        plot_audio = mixed_audio[:, 0] if mic_type == 'ambisonic' else mixed_audio
+        plot_spectrogram(
+            plot_audio,
+            FS,
+            title=f"Output Spectrogram (Raytracing, {mic_type})",
+            filename=os.path.join(
+                output_dir, f"raytracing_spectrogram_{mic_type}.png"
+            ),
+            show=False,
+        )
+
+        # Analytics
+        rir = rirs[mic.name]
+        plot_reverberation_time(
+            rir, FS, filename=os.path.join(output_dir, "reverberation_time.png"), show=False
+        )
+
+        # 2. Decay curve for one octave band (e.g., 1000 Hz)
+        decay_path = os.path.join(output_dir, f"decay_curve_1000hz_{mic_type}.png")
+        plot_decay_curve(rir, FS, band=1000, schroeder=False, filename=decay_path, show=False)
+
+        # 3. Schroeder curve (broadband)
+        schroeder_path = os.path.join(output_dir, f"schroeder_curve_{mic_type}.png")
+        plot_decay_curve(rir, FS, schroeder=True, filename=schroeder_path, show=False)
+        # --- End of new plots ---
     else:
         print("Error: No audio output generated.")
 

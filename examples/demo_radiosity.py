@@ -3,9 +3,18 @@ import sys
 import argparse
 import numpy as np
 from scipy.io import wavfile
-import matplotlib.pyplot as plt
+import json
 
 from rayroom import Room, Source, Receiver, AmbisonicReceiver, RadiosityRenderer, get_material, Person
+from rayroom.analytics.acoustics import (
+    calculate_clarity,
+    calculate_drr,
+)
+from rayroom.room.visualize import (
+    plot_reverberation_time,
+    plot_decay_curve,
+    plot_spectrogram,
+)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -16,9 +25,9 @@ def main(mic_type='mono', output_dir='outputs/radiosity'):
     # 1. Define Room
     print("Creating room (4m x 2m x 2.5m)...")
     room = Room.create_shoebox([4, 2, 2.5], materials={
-        "floor": get_material("heavy_curtain"),
-        "ceiling": get_material("heavy_curtain"),
-        "walls": get_material("wood")
+        "floor": get_material("carpet"),
+        "ceiling": get_material("plaster"),
+        "walls": get_material("concrete")
     })
 
     # 2. Add Receiver
@@ -76,7 +85,7 @@ def main(mic_type='mono', output_dir='outputs/radiosity'):
 
     # 8. Render
     print("Starting Radiosity Rendering pipeline (ISM Order 2 + Radiosity)...")
-    outputs = renderer.render(
+    outputs, rirs = renderer.render(
         ism_order=2,
         rir_duration=1.5
     )
@@ -98,12 +107,52 @@ def main(mic_type='mono', output_dir='outputs/radiosity'):
 
         # Plot Spectrogram
         plot_audio = mixed_audio[:, 0] if mic_type == 'ambisonic' else mixed_audio
-        plt.figure(figsize=(10, 4))
-        plt.specgram(plot_audio, Fs=FS, NFFT=1024, noverlap=512)
-        plt.title(f"Output Spectrogram (Radiosity, {mic_type})")
-        plt.colorbar(format='%+2.0f dB')
-        plt.savefig(os.path.join(output_dir, f"radiosity_spectrogram_{mic_type}.png"))
-        print(f"Saved radiosity_spectrogram_{mic_type}.png to {output_dir}")
+        plot_spectrogram(
+            plot_audio,
+            FS,
+            title=f"Output Spectrogram (Radiosity, {mic_type})",
+            filename=os.path.join(output_dir, f"radiosity_spectrogram_{mic_type}.png"),
+            show=False,
+        )
+
+        # --- Generate new acoustic plots ---
+        rir = rirs[mic.name]
+
+        # 1. RT60 vs. Frequency
+        rt_path = os.path.join(output_dir, "reverberation_time.png")
+        plot_reverberation_time(rir, FS, filename=rt_path, show=False)
+
+        # 2. Decay curve for one octave band (e.g., 1000 Hz)
+        decay_path = os.path.join(output_dir, "decay_curve_1000hz.png")
+        plot_decay_curve(rir, FS, band=1000, schroeder=False, filename=decay_path, show=False)
+
+        # 3. Schroeder curve (broadband)
+        schroeder_path = os.path.join(output_dir, "schroeder_curve.png")
+        plot_decay_curve(rir, FS, schroeder=True, filename=schroeder_path, show=False)
+        # --- End of new plots ---
+
+        # --- Calculate and print new metrics ---
+        c50 = calculate_clarity(rir, FS, 50)
+        c80 = calculate_clarity(rir, FS, 80)
+        drr = calculate_drr(rir, FS)
+
+        print("\nAcoustic Metrics:")
+        print(f"  - C50 (Speech Clarity): {c50:.2f} dB")
+        print(f"  - C80 (Music Clarity):  {c80:.2f} dB")
+        print(f"  - DRR (Direct-to-Reverberant Ratio): {drr:.2f} dB")
+
+        # --- Save metrics to JSON ---
+        metrics = {
+            "c50_db": c50,
+            "c80_db": c80,
+            "drr_db": drr,
+        }
+        metrics_path = os.path.join(output_dir, "acoustic_metrics.json")
+        with open(metrics_path, 'w') as f:
+            json.dump(metrics, f, indent=4)
+        print(f"Acoustic metrics saved to {metrics_path}")
+        # --- End of new metrics ---
+
     else:
         print("Error: No audio output generated.")
 

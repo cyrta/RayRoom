@@ -34,6 +34,7 @@ class RaytracingRenderer:
         self.fs = fs
         self.source_audios = {}  # Map source_obj -> audio_array
         self.source_gains = {}  # Map source_obj -> linear gain
+        self.last_rirs = {}  # Attribute to store RIRs
 
     def set_source_audio(self, source, audio, gain=1.0):
         """
@@ -111,6 +112,7 @@ class RaytracingRenderer:
         # Initialize outputs for each receiver
         receiver_outputs = {rx.name: None for rx in self.room.receivers}
         all_paths = {} if record_paths else None
+        self.last_rirs = {}  # Reset RIRs
 
         # Iterate over sources that have audio assigned
         # Only render sources that are in the room AND have audio
@@ -164,6 +166,9 @@ class RaytracingRenderer:
                         random_phase=not interference
                     )
 
+                    # Store multi-channel RIR
+                    rir = np.stack([rir_w, rir_x, rir_y, rir_z], axis=1)
+
                     # Convolve each channel
                     processed_w = fftconvolve(
                         source_audio * gain, rir_w, mode='full'
@@ -207,6 +212,9 @@ class RaytracingRenderer:
                         source_audio * gain, rir, mode='full'
                     )
 
+                # Accumulate RIRs - for now, last source overwrites
+                self.last_rirs[rx.name] = rir
+
                 if receiver_outputs[rx.name] is None:
                     receiver_outputs[rx.name] = processed
                 else:
@@ -240,5 +248,5 @@ class RaytracingRenderer:
                 receiver_outputs[name] /= np.max(np.abs(audio))
 
         if record_paths:
-            return receiver_outputs, all_paths
-        return receiver_outputs
+            return receiver_outputs, all_paths, self.last_rirs
+        return receiver_outputs, self.last_rirs

@@ -4,6 +4,7 @@ import numpy as np
 from scipy.io import wavfile
 
 from rayroom import Room, Source, Receiver, HybridRenderer, get_material
+from rayroom.room.visualize import plot_reverberation_time, plot_decay_curve
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -20,9 +21,9 @@ def main():
     ]
 
     materials = {
-        "floor": get_material("brick"),
-        "ceiling": get_material("brick"),
-        "walls": get_material("brick"),
+        "floor": get_material("carpet"),
+        "ceiling": get_material("plaster"),
+        "walls": get_material("concrete"),
     }
 
     room = Room.create_from_corners(corners, height=3.0, materials=materials)
@@ -49,7 +50,7 @@ def main():
     renderer.set_source_audio(source1, os.path.join(base_path, "speaker_1.wav"), gain=1.0)
     renderer.set_source_audio(source2, os.path.join(base_path, "speaker_2.wav"), gain=1.0)
 
-    outputs = renderer.render(
+    outputs, rirs = renderer.render(
         n_rays=20000,
         max_hops=40,
         rir_duration=1.5,
@@ -62,6 +63,22 @@ def main():
         mixed_audio /= np.max(np.abs(mixed_audio))
         wavfile.write(os.path.join(output_dir, output_file), FS, (mixed_audio * 32767).astype(np.int16))
         print(f"Hybrid simulation complete. Saved to {os.path.join(output_dir, output_file)}")
+
+        # --- Generate new acoustic plots ---
+        rir = rirs[receiver.name]
+
+        # 1. RT60 vs. Frequency
+        rt_path = os.path.join(output_dir, "reverberation_time.png")
+        plot_reverberation_time(rir, FS, filename=rt_path, show=False)
+
+        # 2. Decay curve for one octave band (e.g., 1000 Hz)
+        decay_path = os.path.join(output_dir, "decay_curve_1000hz.png")
+        plot_decay_curve(rir, FS, band=1000, schroeder=False, filename=decay_path, show=False)
+
+        # 3. Schroeder curve (broadband)
+        schroeder_path = os.path.join(output_dir, "schroeder_curve.png")
+        plot_decay_curve(rir, FS, schroeder=True, filename=schroeder_path, show=False)
+        # --- End of new plots ---
 
 
 if __name__ == "__main__":

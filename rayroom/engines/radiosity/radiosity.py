@@ -15,12 +15,16 @@ class RadiosityRenderer(HybridRenderer):
     def __init__(self, room, fs=44100, temperature=20.0, humidity=50.0, patch_size=0.5):
         super().__init__(room, fs, temperature, humidity)
         self.radiosity_solver = RadiositySolver(room, patch_size=patch_size)
+        self.last_rirs = {}
 
     def render(self, ism_order=2, rir_duration=1.5, verbose=True):
         """
         Render using ISM + Radiosity.
         """
         receiver_outputs = {rx.name: None for rx in self.room.receivers}
+        rirs = {rx.name: None for rx in self.room.receivers}
+        self.last_rirs = {}  # Reset RIRs
+
         valid_sources = [s for s in self.room.sources if s in self.source_audios]
         for source in valid_sources:
             if verbose:
@@ -76,6 +80,9 @@ class RadiosityRenderer(HybridRenderer):
                     rir_y = generate_rir(rx.y_histogram, fs=self.fs, duration=rir_duration, random_phase=True)
                     rir_z = generate_rir(rx.z_histogram, fs=self.fs, duration=rir_duration, random_phase=True)
 
+                    # Store multi-channel RIR
+                    rir = np.stack([rir_w, rir_x, rir_y, rir_z], axis=1)
+
                     # Convolve each channel
                     processed_w = fftconvolve(source_audio * gain, rir_w, mode='full')
                     processed_x = fftconvolve(source_audio * gain, rir_x, mode='full')
@@ -99,6 +106,17 @@ class RadiosityRenderer(HybridRenderer):
                 else:  # Standard Receiver
                     rir = generate_rir(rx.amplitude_histogram, fs=self.fs, duration=rir_duration, random_phase=True)
                     processed = fftconvolve(source_audio * gain, rir, mode='full')
+
+                if rirs[rx.name] is None:
+                    rirs[rx.name] = rir
+                else:
+                    # This part is tricky for multiple sources.
+                    # RIRs are source-dependent. For now, we overwrite (last source dominates).
+                    # A better approach would be to return RIRs per source.
+                    rirs[rx.name] = rir
+
+                self.last_rirs[rx.name] = rir
+
                 if receiver_outputs[rx.name] is None:
                     receiver_outputs[rx.name] = processed
                 else:
@@ -124,4 +142,4 @@ class RadiosityRenderer(HybridRenderer):
                 m = np.max(np.abs(v))
                 if m > 0:
                     receiver_outputs[k] = v / m
-        return receiver_outputs
+        return receiver_outputs, self.last_rirs

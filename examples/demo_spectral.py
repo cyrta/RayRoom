@@ -3,24 +3,45 @@ import sys
 import argparse
 import numpy as np
 from scipy.io import wavfile
-import matplotlib.pyplot as plt
+import json
 
-from rayroom import Room, Source, Receiver, AmbisonicReceiver, SpectralRenderer, get_material, Person
+from rayroom import (
+    Room,
+    Source,
+    Receiver,
+    AmbisonicReceiver,
+    SpectralRenderer,
+    get_material,
+    Person,
+)
+from rayroom.analytics.acoustics import (
+    calculate_clarity,
+    calculate_drr,
+)
+from rayroom.room.visualize import (
+    plot_reverberation_time,
+    plot_decay_curve,
+    plot_spectrogram,
+)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 
-def main(mic_type='mono', output_dir='outputs'):
-    FS = 44100
+FS = 44100
 
+
+def main(mic_type='mono', output_dir='outputs/spectral'):
+    """
+    Main function to run the spectral simulation.
+    """
     # 1. Define Small Room
     # Keeping it very small for FDTD speed in this example
     # 4m x 2m x 2.5m
     print("Creating room (4m x 2m x 2.5m)...")
     room = Room.create_shoebox([4, 2, 2.5], materials={
-        "floor": get_material("heavy_curtain"),
-        "ceiling": get_material("heavy_curtain"),
-        "walls": get_material("wood")
+        "floor": get_material("carpet"),
+        "ceiling": get_material("plaster"),
+        "walls": get_material("concrete")
     })
 
     # 2. Add Receiver
@@ -104,11 +125,11 @@ def main(mic_type='mono', output_dir='outputs'):
     print("Phase 1: HF (Geometric) + Phase 2: LF (FDTD)")
     print("Note: FDTD step may take time...")
 
-    outputs, _ = renderer.render(
+    outputs, rirs = renderer.render(
         n_rays=10000,
         max_hops=10,
-        rir_duration=0.2,  # Short duration for demo speed
-        record_paths=True,
+        rir_duration=1.0,  # Short duration for demo speed
+        record_paths=False,
         ism_order=1
     )
 
@@ -129,12 +150,57 @@ def main(mic_type='mono', output_dir='outputs'):
 
         # Plot Spectrogram
         plot_audio = mixed_audio[:, 0] if mic_type == 'ambisonic' else mixed_audio
-        plt.figure(figsize=(10, 4))
-        plt.specgram(plot_audio, Fs=FS, NFFT=1024, noverlap=512)
-        plt.title(f"Output Spectrogram (Spectral Method, {mic_type})")
-        plt.colorbar(format='%+2.0f dB')
-        plt.savefig(os.path.join(output_dir, f"spectral_spectrogram_{mic_type}.png"))
-        print(f"Saved spectral_spectrogram_{mic_type}.png to {output_dir}")
+        plot_spectrogram(
+            plot_audio,
+            FS,
+            title=f"Output Spectrogram (Spectral, {mic_type})",
+            filename=os.path.join(output_dir, f"spectral_spectrogram_{mic_type}.png"),
+            show=False,
+        )
+
+        # --- Generate new acoustic plots ---
+        rir = rirs[mic.name]
+        # For ambisonic, use the first channel (W) for analysis
+        if mic_type == 'ambisonic' and rir.ndim > 1:
+            rir = rir[:, 0]
+
+        # 1. RT60 vs. Frequency
+        rt_path = os.path.join(output_dir, f"reverberation_time_{mic_type}.png")
+        plot_reverberation_time(rir, FS, filename=rt_path, show=False)
+
+        # 2. Decay curve for one octave band (e.g., 1000 Hz)
+        decay_path = os.path.join(output_dir, f"decay_curve_1000hz_{mic_type}.png")
+        plot_decay_curve(rir, FS, band=1000, schroeder=False, filename=decay_path, show=False)
+
+        # 3. Schroeder curve (broadband)
+        schroeder_path = os.path.join(output_dir, f"schroeder_curve_{mic_type}.png")
+        plot_decay_curve(rir, FS, schroeder=True, filename=schroeder_path, show=False)
+        # --- End of new plots ---
+
+        # --- Calculate and print new metrics ---
+        c50 = calculate_clarity(rir, FS, 50)
+        c80 = calculate_clarity(rir, FS, 80)
+        drr = calculate_drr(rir, FS)
+
+        print("\nAcoustic Metrics:")
+        print(f"  - C50 (Speech Clarity): {c50:.2f} dB")
+        print(f"  - C80 (Music Clarity):  {c80:.2f} dB")
+        print(f"  - DRR (Direct-to-Reverberant Ratio): {drr:.2f} dB")
+
+        # --- Save metrics to JSON ---
+        metrics = {
+            "c50_db": c50,
+            "c80_db": c80,
+            "drr_db": drr,
+        }
+        metrics_path = os.path.join(output_dir, "acoustic_metrics.json")
+        with open(metrics_path, 'w') as f:
+            json.dump(metrics, f, indent=4)
+        print(f"Acoustic metrics saved to {metrics_path}")
+        # --- End of new metrics ---
+
+    else:
+        print("Error: No audio output generated.")
 
 
 if __name__ == "__main__":

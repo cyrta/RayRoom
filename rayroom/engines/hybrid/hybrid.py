@@ -34,6 +34,7 @@ class HybridRenderer:
         self.ism_engine = ImageSourceEngine(room, temperature, humidity)
         self.source_audios = {}
         self.source_gains = {}
+        self.last_rirs = {}
 
     def set_source_audio(self, source, audio, gain=1.0):
         """
@@ -71,6 +72,7 @@ class HybridRenderer:
         """
         receiver_outputs = {rx.name: None for rx in self.room.receivers}
         all_paths = {} if record_paths else None
+        self.last_rirs = {}
         valid_sources = [s for s in self.room.sources if s in self.source_audios]
 
         if not valid_sources:
@@ -104,21 +106,27 @@ class HybridRenderer:
                 if isinstance(rx, AmbisonicReceiver):
                     # For Ambisonic, ISM provides only one histogram. We can add it to the 'W' channel.
                     # This is a simplification. A more accurate approach would require directional ISM.
-                    rirs = [
-                        generate_rir(rx.w_histogram, self.fs, rir_duration, not interference),
-                        generate_rir(rx.x_histogram, self.fs, rir_duration, not interference),
-                        generate_rir(rx.y_histogram, self.fs, rir_duration, not interference),
-                        generate_rir(rx.z_histogram, self.fs, rir_duration, not interference),
-                    ]
+                    rir_w = generate_rir(rx.w_histogram, self.fs, rir_duration, not interference)
+                    rir_x = generate_rir(rx.x_histogram, self.fs, rir_duration, not interference)
+                    rir_y = generate_rir(rx.y_histogram, self.fs, rir_duration, not interference)
+                    rir_z = generate_rir(rx.z_histogram, self.fs, rir_duration, not interference)
+                    rirs = [rir_w, rir_x, rir_y, rir_z]
+
+                    # Store multi-channel RIR
+                    rir = np.stack(rirs, axis=1)
                 else:
-                    rirs = [generate_rir(rx.amplitude_histogram, self.fs, rir_duration, not interference)]
+                    rir = generate_rir(rx.amplitude_histogram, self.fs, rir_duration, not interference)
+                    rirs = [rir]
+
+                # Store the RIR, last source overwrites.
+                self.last_rirs[rx.name] = rir
 
                 # 4. Convolve and Mix
                 source_audio = self.source_audios[source]
                 gain = self.source_gains.get(source, 1.0)
 
                 if isinstance(rx, AmbisonicReceiver):
-                    processed_channels = [fftconvolve(source_audio * gain, rir, mode='full') for rir in rirs]
+                    processed_channels = [fftconvolve(source_audio * gain, rir_ch, mode='full') for rir_ch in rirs]
                     max_len = max(len(pc) for pc in processed_channels)
                     padded_channels = [np.pad(pc, (0, max_len - len(pc))) for pc in processed_channels]
                     processed = np.stack(padded_channels, axis=1)
@@ -145,5 +153,5 @@ class HybridRenderer:
                 receiver_outputs[name] /= np.max(np.abs(audio))
 
         if record_paths:
-            return receiver_outputs, all_paths
-        return receiver_outputs
+            return receiver_outputs, all_paths, self.last_rirs
+        return receiver_outputs, self.last_rirs
