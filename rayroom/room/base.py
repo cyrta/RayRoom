@@ -191,6 +191,8 @@ class Room:
         if materials is None:
             mat_def = get_material("concrete")
             mats = {"floor": mat_def, "ceiling": mat_def, "walls": mat_def}
+        else:
+            mats = materials
 
         walls = []
 
