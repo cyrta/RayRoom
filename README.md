@@ -20,6 +20,7 @@ A Python-based ray tracing acoustics simulator supporting complex room geometrie
 - **Materials**: Frequency-dependent absorption, transmission (transparency), and scattering coefficients.
 - **Objects**: Support for furniture, people (blockers), sources, and receivers (microphones).
 - **Audio Formats**: Supports both mono and first-order Ambisonic (FOA) rendering.
+- **Acoustic Analysis**: Post-simulation analysis including reverberation time (RT60), clarity (C50, C80), and Direct-to-Reverberant Ratio (DRR).
 
 ## Physics & Rendering
 
@@ -61,6 +62,7 @@ graph TD
         A[1. Define Room]
         B[2. Add Sources/Mics]
         C[3. Select Renderer]
+        D[4. Analyze & Visualize]
     end
 
     subgraph "Core Components"
@@ -68,17 +70,22 @@ graph TD
         Physics["Acoustic Physics"]
     end
 
-    subgraph "Standalone Rendering Engines"
+    subgraph "Rendering Engines"
         Raytracer["<b>Ray Tracing</b><br><i>Stochastic late reflections</i>"]
         ISM["<b>Image Source Method</b><br><i>Deterministic early reflections</i>"]
         FDTD["<b>FDTD Solver</b><br><i>Low-frequency wave physics</i>"]
         Radiosity["<b>Acoustic Radiosity</b><br><i>Diffuse field energy</i>"]
+        Hybrid["<b>HybridRenderer</b><br>Combines ISM & Ray Tracing"]
+        Spectral["<b>SpectralRenderer</b><br>Combines FDTD & Hybrid"]
     end
 
-    subgraph "Advanced Hybrid Renderers"
-        Hybrid["<b>HybridRenderer</b><br>Combines ISM and Ray Tracing"]
-        Spectral["<b>SpectralRenderer</b><br>Combines FDTD and Hybrid"]
+    subgraph "Post-Processing"
+        Analysis["<b>Acoustic Analysis</b><br><i>RT60, Clarity, DRR</i>"]
+        Visualize["<b>Visualization</b><br><i>Layouts & Plots</i>"]
     end
+
+    A & B --> RoomModel
+    RoomModel --> Visualize
 
     C --> Raytracer
     C --> ISM
@@ -87,20 +94,15 @@ graph TD
     C --> Hybrid
     C --> Spectral
 
-    Raytracer --> RoomModel
-    ISM --> RoomModel
-    FDTD --> RoomModel
-    Radiosity --> RoomModel
+    Raytracer & ISM & FDTD & Radiosity & Hybrid & Spectral --> RoomModel
+    Raytracer & ISM & FDTD & Radiosity & Hybrid & Spectral --> Physics
+    
+    Hybrid --> ISM & Raytracer
+    Spectral --> FDTD & Hybrid
 
-    Raytracer --> Physics
-    ISM --> Physics
-    FDTD --> Physics
-    Radiosity --> Physics
-
-    Hybrid --> ISM
-    Hybrid --> Raytracer
-    Spectral --> FDTD
-    Spectral --> Hybrid
+    Raytracer & ISM & FDTD & Radiosity & Hybrid & Spectral -- RIR --> Analysis
+    Analysis --> Visualize
+    D --> Analysis
 ```
 
 ## Installation
@@ -211,18 +213,61 @@ renderer.set_source_audio(source, "input.wav")
 outputs = renderer.render(ism_order=2)
 ```
 
+### Ambisonic Rendering
+
+To render First-Order Ambisonic (FOA) audio, simply use an `AmbisonicReceiver`. The output will be a 4-channel audio file (W, X, Y, Z).
+
+```python
+from rayroom import AmbisonicReceiver
+
+# ... setup room ...
+
+# Use an Ambisonic receiver for FOA output
+ambisonic_receiver = AmbisonicReceiver("AmbiMic", [1, 2, 1.5], radius=0.02)
+room.add_receiver(ambisonic_receiver)
+
+# ... run renderer ...
+# output_audio will be a 4-channel numpy array
+```
+
 ### Complex Geometry
 
-See `examples/polygon_room.py` for creating rooms from 2D floor plans.
+See `examples/demo_polygon_room.py` for creating rooms from 2D floor plans.
+
+## Acoustic Analysis & Visualization
+
+RayRoom includes tools to analyze the acoustic properties of your simulated space from the generated Room Impulse Response (RIR). The renderer can return the RIR for each receiver if you set `record_paths=True` in the `render` method (note: this is renderer-dependent).
+
+```python
+from rayroom.analytics.acoustics import calculate_clarity, calculate_drr
+from rayroom.room.visualize import plot_reverberation_time, plot_decay_curve
+
+# Assuming 'rirs' is the dictionary of impulse responses from renderer.render()
+rir = rirs[receiver.name]
+fs = 44100
+
+# 1. Calculate metrics
+c80 = calculate_clarity(rir, fs, 80)  # Music clarity
+drr = calculate_drr(rir, fs)
+print(f"Music Clarity (C80): {c80:.2f} dB")
+print(f"Direct-to-Reverberant Ratio: {drr:.2f} dB")
+
+# 2. Plot reverberation time across frequency bands
+plot_reverberation_time(rir, fs, filename="rt60.png", show=False)
+
+# 3. Plot the decay curve for a specific frequency band
+plot_decay_curve(rir, fs, band=1000, filename="decay_1000hz.png", show=False)
+```
 
 ## Structure
 
 - `rayroom/room/base.py`: Room and wall definitions.
 - `rayroom/room/objects.py`: Source, Receiver, and Furniture classes.
 - `rayroom/room/materials.py`: Material properties.
+- `rayroom/room/visualize.py`: Visualization tools for room layouts and acoustic plots.
+- `rayroom/analytics/acoustics.py`: Acoustic metrics calculation (RT60, Clarity, etc.).
 - `rayroom/core/geometry.py`: Vector math and intersection tests.
 - `rayroom/core/physics.py`: Acoustic physics models.
-- `rayroom/room/visualize.py`: Visualization tools.
 - `rayroom/core/utils.py`: Utility functions.
 - `rayroom/engines/raytracer/core.py`: Main Ray Tracing engine.
 - `rayroom/engines/raytracer/audio.py`: Audio processing for ray tracer.
