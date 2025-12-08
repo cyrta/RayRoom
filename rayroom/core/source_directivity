@@ -487,6 +487,53 @@ def _create_human_voice_singing() -> DirectivityData:
         directivity_index=directivity_index,
     )
 
+def _create_human_voice_shouting() -> DirectivityData:
+    """
+    Shouting human voice directivity
+    
+    Characteristics compared to normal speech:
+    - Higher directivity at all frequencies (louder = more directional)
+    - Stronger forward bias due to increased vocal effort
+    - More energy projection in frontal hemisphere
+    - DI increased by 2-4 dB across spectrum
+    
+    Based on research:
+    - Increased vocal intensity → increased directivity
+    - Mouth opening larger → more directive at high frequencies
+    - Trained projection (similar to singing but more aggressive)
+    
+    Typical DI progression:
+    - Low freq (125 Hz): 0.5 dB (slight directivity even at low freq)
+    - Mid freq (1 kHz): 4.0 dB (strong forward projection)
+    - High freq (8 kHz): 8.0 dB (very directional)
+    
+    Returns
+    -------
+    DirectivityData
+        Shouting voice pattern
+    """
+    frequencies = np.array([125, 250, 500, 1000, 2000, 4000, 8000])
+    
+    # Directivity Index (dB) - increased from normal speech
+    # Normal speech: [0.0, 0.5, 1.0, 2.0, 3.0, 4.5, 5.5]
+    # Shouting: Add 0.5-2.5 dB depending on frequency
+    directivity_index = np.array([
+        0.5,   # 125 Hz: slight increase
+        1.0,   # 250 Hz
+        2.0,   # 500 Hz
+        4.0,   # 1 kHz: strong projection
+        5.5,   # 2 kHz
+        7.0,   # 4 kHz: very directional
+        8.0,   # 8 kHz: extremely directional
+    ])
+    
+    return DirectivityData(
+        frequencies=frequencies,
+        pattern=None,  # Use analytical
+        pattern_type='cardioid',
+        directivity_index=directivity_index,
+    )
+
 
 def _create_trumpet() -> DirectivityData:
     """
@@ -601,6 +648,7 @@ DirectionalSource.PRESETS = {
     'human_voice': _create_human_voice_speech,
     'human_voice_speech': _create_human_voice_speech,
     'human_voice_singing': _create_human_voice_singing,
+    'human_voice_shouting': _create_human_voice_shouting,
     'trumpet': _create_trumpet,
     'violin': _create_violin,
     'loudspeaker': _create_loudspeaker_hifi,
