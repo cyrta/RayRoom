@@ -56,7 +56,7 @@ Solves the acoustic wave equation on a 3D grid.
 Here is a high-level overview of the library's architecture, showing the relationship between the different rendering engines.
 
 ```mermaid
-graph TD
+graph LR
     subgraph "User Workflow"
         direction LR
         A[1. Define Room]

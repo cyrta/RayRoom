@@ -51,7 +51,7 @@ def create_demo_room(mic_type='mono'):
         "floor": get_material("carpet"),
         "ceiling": get_material("plaster"),
         "walls": get_material("concrete")
-    })
+    }, fs=DEFAULT_SAMPLING_RATE)
 
     # 2. Add Receiver (Microphone) - centered
     mic_pos = [2, 1, 1.5]

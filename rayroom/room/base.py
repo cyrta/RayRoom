@@ -41,17 +41,20 @@ class Room:
     Represents the acoustic environment, including geometry, materials, and objects.
     """
 
-    def __init__(self, walls=None):
+    def __init__(self, walls=None, fs=16000):
         """
         Initialize a Room.
 
         :param walls: List of Wall objects defining the room boundary.
         :type walls: list[rayroom.room.Wall], optional
+        :param fs: Sampling frequency in Hz.
+        :type fs: int, optional
         """
         self.walls = walls if walls else []
         self.furniture = []
         self.sources = []
         self.receivers = []
+        self.fs = fs
 
     def add_furniture(self, item):
         """
@@ -102,13 +105,15 @@ class Room:
             plot_room(self, filename, show)
 
     @classmethod
-    def create_shoebox(cls, dimensions, materials=None):
+    def create_shoebox(cls, dimensions, materials=None, fs=16000):
         """
         Create a shoebox room.
         :param dimensions: [width, depth, height]
         :type dimensions: list
         :param materials: Material for all walls, or dict with keys: floor, ceiling, front, back, left, right.
         :type materials: rayroom.materials.Material or dict, optional
+        :param fs: Sampling frequency in Hz.
+        :type fs: int, optional
         """
         w, d, h = dimensions
 
@@ -164,10 +169,12 @@ class Room:
         # Reversed: 5,6,2,1 -> Normal -x (In).
         walls.append(Wall("Right", [v[5], v[6], v[2], v[1]], mats["right"]))
 
-        return cls(walls)
+        room = cls(walls, fs=fs)
+        room.corners = dimensions
+        return room
 
     @classmethod
-    def create_from_corners(cls, corners, height, materials=None):
+    def create_from_corners(cls, corners, height, materials=None, fs=16000):
         """
         Create a room from a 2D floor plan (corners) and a height.
 
@@ -178,6 +185,8 @@ class Room:
         :type height: float
         :param materials: Dictionary mapping 'floor', 'ceiling', 'walls' to Material objects.
         :type materials: dict, optional
+        :param fs: Sampling frequency in Hz.
+        :type fs: int, optional
         :return: A new Room instance.
         :rtype: Room
         """
@@ -225,4 +234,10 @@ class Room:
 
             walls.append(Wall(f"Wall_{i}", [p1, p2, p3, p4], wall_mat))
 
-        return cls(walls)
+        room = cls(walls, fs=fs)
+        # For non-shoebox rooms, we can calculate the bounding box.
+        all_verts = np.array([v for wall in walls for v in wall.vertices])
+        min_coords = np.min(all_verts, axis=0)
+        max_coords = np.max(all_verts, axis=0)
+        room.corners = (max_coords - min_coords).tolist()  # Store as [width, depth, height]
+        return room

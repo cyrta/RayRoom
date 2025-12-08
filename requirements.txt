@@ -4,3 +4,4 @@ scipy
 flake8
 matplotlib
 pedalboard
+soundfile
